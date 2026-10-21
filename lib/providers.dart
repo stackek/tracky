@@ -230,6 +230,13 @@ final currenciesProvider = FutureProvider<List<CurrencyInfo>>(
   (ref) => ref.watch(repositoryProvider).currencies(),
 );
 
+final exchangeRatesProvider = FutureProvider<Map<String, double>>((ref) {
+  final settings = ref.watch(settingsProvider);
+  return ref
+      .watch(repositoryProvider)
+      .exchangeRatesTo(settings.homeCurrency);
+});
+
 final transactionsProvider = FutureProvider<List<Transaction>>((ref) {
   final filter = ref.watch(transactionFilterProvider);
   return ref.watch(repositoryProvider).transactions(filter);

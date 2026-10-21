@@ -42,6 +42,19 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         ? null
         : accounts.where((a) => a.id == filter.accountId).firstOrNull;
     final currency = selectedAccount?.currency ?? settings.homeCurrency;
+    final rates = ref.watch(exchangeRatesProvider).value ?? const <String, double>{};
+    final activeAccounts = accounts.where((a) => !a.isArchived).toList();
+    final totalHome = activeAccounts.fold<int>(
+      0,
+      (sum, account) =>
+          sum +
+          (account.excludeFromTotals
+              ? 0
+              : (account.balance * (rates[account.currency] ?? 1)).round()),
+    );
+    final headerBalance = selectedAccount?.balance ?? totalHome;
+    final headerCurrency = selectedAccount?.currency ?? settings.homeCurrency;
+    final headerLabel = selectedAccount?.label ?? 'All accounts';
     final periodLabel = filter.period == TransactionPeriod.custom
         ? '${filter.from == null ? '' : formatShortDate(filter.from!)}'
               '${filter.to == null ? '' : ' – ${formatShortDate(filter.to!)}'}'
@@ -49,7 +62,36 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Transactions'),
+        title: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _showFundsSheet(context, selectedAccount),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  headerLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  formatMoney(headerBalance, headerCurrency),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'Search',
@@ -168,6 +210,159 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Future<void> _showFundsSheet(
+    BuildContext context,
+    Account? selectedAccount,
+  ) async {
+    final settings = ref.read(settingsProvider);
+    final home = settings.homeCurrency;
+    final rates =
+        (await ref.read(repositoryProvider).exchangeRatesTo(home));
+    final accounts = (await ref.read(repositoryProvider).accounts())
+        .where((account) => !account.isArchived)
+        .toList();
+    if (!context.mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        if (selectedAccount != null) {
+          final rate = rates[selectedAccount.currency] ?? 1;
+          final homeBalance = (selectedAccount.balance * rate).round();
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    selectedAccount.label,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Current funds',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    formatMoney(
+                      selectedAccount.balance,
+                      selectedAccount.currency,
+                    ),
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 16),
+                  if (selectedAccount.currency != home) ...[
+                    _FundsRow(
+                      label: 'Exchange rate',
+                      value:
+                          '1 ${selectedAccount.currency} = '
+                          '${formatRate(rate)} $home',
+                    ),
+                    const SizedBox(height: 8),
+                    _FundsRow(
+                      label: 'In $home',
+                      value: formatMoney(homeBalance, home),
+                      emphasize: true,
+                    ),
+                  ] else
+                    _FundsRow(
+                      label: 'Default currency',
+                      value: home,
+                    ),
+                ],
+              ),
+            ),
+          );
+        }
+        final active = accounts;
+        final total = active.fold<int>(
+          0,
+          (sum, account) =>
+              sum +
+              (account.excludeFromTotals
+                  ? 0
+                  : (account.balance * (rates[account.currency] ?? 1)).round()),
+        );
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.92,
+          builder: (context, controller) => SafeArea(
+            child: ListView(
+              controller: controller,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                Text(
+                  'Account funds',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Total in $home',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  formatMoney(total, home),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                for (final account in active) ...[
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: colorFromDb(
+                        account.color,
+                      ).withValues(alpha: 0.18),
+                      child: Icon(
+                        iconForAccountType(account.type),
+                        color: colorFromDb(account.color),
+                      ),
+                    ),
+                    title: Text(account.label),
+                    subtitle: Text(account.typeDisplayName),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formatMoney(account.balance, account.currency),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        if (account.currency != home)
+                          Text(
+                            '≈ ${formatMoney((account.balance * (rates[account.currency] ?? 1)).round(), home)}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -381,6 +576,41 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FundsRow extends StatelessWidget {
+  const _FundsRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
