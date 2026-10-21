@@ -47,12 +47,12 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
             icon: const Icon(Icons.sort),
             onPressed: () => _pickSort(context),
           ),
-          IconButton(
-            tooltip: 'Add account',
-            icon: const Icon(Icons.add),
-            onPressed: () => context.push('/account/edit'),
-          ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Add account',
+        onPressed: () => context.push('/account/edit'),
+        child: const Icon(Icons.add),
       ),
       body: accounts.when(
         data: (items) {

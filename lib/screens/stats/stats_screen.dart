@@ -2,7 +2,6 @@ import 'package:collection/collection.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/currency.dart';
 import '../../core/dates.dart';
@@ -35,9 +34,21 @@ class StatsScreen extends ConsumerWidget {
     final selectedAccount = accounts
         .where((account) => account.id == accountId)
         .firstOrNull;
+    final statsData = stats.value;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Statistics')),
+      appBar: AppBar(
+        title: Text(
+          statsData == null
+              ? 'Statistics'
+              : formatMoney(
+                  statsData.net,
+                  statsData.currency,
+                  signed: true,
+                ),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onHorizontalDragEnd: (details) {
@@ -58,8 +69,6 @@ class StatsScreen extends ConsumerWidget {
                 _Header(
                   month: month,
                   range: range,
-                  net: data.net,
-                  currency: data.currency,
                   canGoPrevious: canGoPrevious,
                   canGoNext: canGoNext,
                   onPrevious: canGoPrevious
@@ -131,32 +140,10 @@ class StatsScreen extends ConsumerWidget {
                                 : 'Add an expense to see the breakdown by category.',
                           )
                         else
-                          _CategoryBreakdown(
-                            data: data,
-                            type: statsType,
-                            onOpenCategory: (category) => _openCategory(
-                              context,
-                              ref,
-                              category,
-                              month,
-                              range,
-                              accountId,
-                            ),
-                          ),
+                          _CategoryBreakdown(data: data, type: statsType),
                       ],
                     );
                   },
-                ),
-                const SizedBox(height: 12),
-                Center(
-                  child: Text(
-                    range == null
-                        ? 'Swipe left or right to change month'
-                        : 'Showing a custom date range',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -171,28 +158,6 @@ class StatsScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  void _openCategory(
-    BuildContext context,
-    WidgetRef ref,
-    CategoryTotal category,
-    DateTime month,
-    DateTimeRange? range,
-    int? accountId,
-  ) {
-    final notifier = ref.read(transactionFilterProvider.notifier);
-    notifier.clear();
-    if (accountId != null) notifier.setAccount(accountId);
-    if (category.categoryId > 1) {
-      notifier.setCategory(category.categoryId);
-    }
-    final from = range?.start ?? DateTime(month.year, month.month, 1);
-    final to = range == null
-        ? DateTime(month.year, month.month + 1, 0, 23, 59, 59)
-        : DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
-    notifier.setDates(from, to);
-    context.go('/transactions');
   }
 
   Future<void> _pickRange(BuildContext context, WidgetRef ref) async {
@@ -247,8 +212,6 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.month,
     required this.range,
-    required this.net,
-    required this.currency,
     required this.canGoPrevious,
     required this.canGoNext,
     required this.onPrevious,
@@ -259,8 +222,6 @@ class _Header extends StatelessWidget {
 
   final DateTime month;
   final DateTimeRange? range;
-  final int net;
-  final String currency;
   final bool canGoPrevious;
   final bool canGoNext;
   final VoidCallback? onPrevious;
@@ -271,84 +232,56 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final controls = range != null
-        ? Row(
-            children: [
-              IconButton(
-                onPressed: onPickRange,
-                icon: const Icon(Icons.calendar_month),
-                tooltip: 'Change range',
-              ),
-              Expanded(
-                child: Text(
-                  '${formatShortDate(range!.start)} – ${formatShortDate(range!.end)}',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: onClearRange,
-                icon: const Icon(Icons.close),
-                tooltip: 'Back to monthly view',
-              ),
-            ],
-          )
-        : Row(
-            children: [
-              IconButton(
-                onPressed: onPrevious,
-                icon: const Icon(Icons.chevron_left),
-                tooltip: 'Previous month',
-              ),
-              Expanded(
-                child: Text(
-                  formatMonth(month),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: onNext,
-                icon: const Icon(Icons.chevron_right),
-                tooltip: 'Next month',
-              ),
-              IconButton(
-                onPressed: onPickRange,
-                icon: const Icon(Icons.calendar_month),
-                tooltip: 'Choose date range',
-              ),
-            ],
-          );
-    return Column(
-      children: [
-        controls,
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Total',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                formatMoney(net, currency, signed: true),
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: net >= 0
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.error,
-                ),
-              ),
-            ],
+    if (range != null) {
+      return Row(
+        children: [
+          IconButton(
+            onPressed: onPickRange,
+            icon: const Icon(Icons.calendar_month),
+            tooltip: 'Change range',
           ),
+          Expanded(
+            child: Text(
+              '${formatShortDate(range!.start)} – ${formatShortDate(range!.end)}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onClearRange,
+            icon: const Icon(Icons.close),
+            tooltip: 'Back to monthly view',
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left),
+          tooltip: 'Previous month',
+        ),
+        Expanded(
+          child: Text(
+            formatMonth(month),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right),
+          tooltip: 'Next month',
+        ),
+        IconButton(
+          onPressed: onPickRange,
+          icon: const Icon(Icons.calendar_month),
+          tooltip: 'Choose date range',
         ),
       ],
     );
@@ -483,15 +416,10 @@ class _BigCard extends StatelessWidget {
 }
 
 class _CategoryBreakdown extends StatefulWidget {
-  const _CategoryBreakdown({
-    required this.data,
-    required this.type,
-    required this.onOpenCategory,
-  });
+  const _CategoryBreakdown({required this.data, required this.type});
 
   final StatsData data;
   final StatsType type;
-  final ValueChanged<CategoryTotal> onOpenCategory;
 
   @override
   State<_CategoryBreakdown> createState() => _CategoryBreakdownState();
@@ -650,8 +578,6 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
               selected: _selectedIndex == i,
               onTap: () =>
                   setState(() => _selectedIndex = _selectedIndex == i ? -1 : i),
-              onDoubleTap: () =>
-                  widget.onOpenCategory(categories[i]),
             ),
         ],
       ),
@@ -667,7 +593,6 @@ class _CategoryRow extends StatelessWidget {
     required this.total,
     required this.selected,
     required this.onTap,
-    required this.onDoubleTap,
   });
 
   final CategoryTotal category;
@@ -676,7 +601,6 @@ class _CategoryRow extends StatelessWidget {
   final int total;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -688,7 +612,6 @@ class _CategoryRow extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        onDoubleTap: onDoubleTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(

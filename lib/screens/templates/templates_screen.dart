@@ -14,18 +14,11 @@ class TemplatesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final templates = ref.watch(templatesProvider);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Templates'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => context.push('/template/edit'),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
+      appBar: AppBar(title: const Text('Templates')),
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/template/edit'),
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('Add'),
       ),
       body: templates.when(
         data: (items) => items.isEmpty

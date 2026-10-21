@@ -19,14 +19,11 @@ class BudgetsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final budgets = ref.watch(budgetsProvider);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Budgets'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _addBudget(context, ref),
-          ),
-        ],
+      appBar: AppBar(title: const Text('Budgets')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _addBudget(context, ref),
+        icon: const Icon(Icons.add),
+        label: const Text('Add'),
       ),
       body: budgets.when(
         data: (items) => items.isEmpty
