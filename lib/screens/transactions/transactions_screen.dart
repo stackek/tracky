@@ -390,6 +390,11 @@ class _TransactionList extends ConsumerWidget {
     }
     final income = periodTotals?.income ?? 0;
     final expense = periodTotals?.expense ?? 0;
+    final accountColors = {
+      for (final account
+          in ref.watch(accountsProvider).value ?? const <Account>[])
+        account.id: account.color,
+    };
 
     final grouped = <String, List<Transaction>>{};
     for (final item in items) {
@@ -428,8 +433,10 @@ class _TransactionList extends ConsumerWidget {
             SliverToBoxAdapter(child: _DayHeader(date: DateTime.parse(key))),
             SliverList.builder(
               itemCount: grouped[key]!.length,
-              itemBuilder: (context, index) =>
-                  _TransactionTile(transaction: grouped[key]![index]),
+              itemBuilder: (context, index) => _TransactionTile(
+                transaction: grouped[key]![index],
+                accountColor: accountColors[grouped[key]![index].accountId],
+              ),
             ),
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 96)),
@@ -674,21 +681,26 @@ class _DayHeader extends StatelessWidget {
 }
 
 class _TransactionTile extends ConsumerWidget {
-  const _TransactionTile({required this.transaction});
+  const _TransactionTile({required this.transaction, this.accountColor});
 
   final Transaction transaction;
+  final int? accountColor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isTransfer = transaction.isTransfer;
     final isIncome = transaction.amount > 0;
+    final accountAccent =
+        accountColor == null ? null : colorFromDb(accountColor);
     final color = isTransfer
         ? theme.colorScheme.tertiary
-        : isIncome
-            ? theme.colorScheme.primary
-            : theme.colorScheme.onSurface;
-    final categoryColor = colorFromDb(transaction.categoryColor);
+        : accountAccent ??
+            (isIncome
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface);
+    final categoryColor =
+        isTransfer ? theme.colorScheme.tertiary : accountAccent ?? colorFromDb(transaction.categoryColor);
 
     return Dismissible(
       key: ValueKey('tx-${transaction.id}'),
