@@ -30,16 +30,14 @@ class StatsScreen extends ConsumerWidget {
     final earliestMonth = earliest == null
         ? currentMonth
         : DateTime(earliest.year, earliest.month, 1);
-    final canGoPrevious =
-        range == null && month.isAfter(earliestMonth);
+    final canGoPrevious = range == null && month.isAfter(earliestMonth);
     final canGoNext = range == null && month.isBefore(currentMonth);
-    final selectedAccount =
-        accounts.where((account) => account.id == accountId).firstOrNull;
+    final selectedAccount = accounts
+        .where((account) => account.id == accountId)
+        .firstOrNull;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Statistics'),
-      ),
+      appBar: AppBar(title: const Text('Statistics')),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onHorizontalDragEnd: (details) {
@@ -68,8 +66,7 @@ class StatsScreen extends ConsumerWidget {
                   onNext: canGoNext
                       ? () => ref.read(statsMonthProvider.notifier).next()
                       : null,
-                  onPickRange: () =>
-                      _pickRange(context, ref, earliest, now),
+                  onPickRange: () => _pickRange(context, ref, earliest, now),
                   onClearRange: () =>
                       ref.read(statsRangeProvider.notifier).set(null),
                 ),
@@ -179,7 +176,8 @@ class StatsScreen extends ConsumerWidget {
       context: context,
       firstDate: earliest ?? DateTime(2000),
       lastDate: now,
-      initialDateRange: current ??
+      initialDateRange:
+          current ??
           DateTimeRange(
             start: DateTime(month.year, month.month + 1, 0),
             end: DateTime(month.year, month.month + 1, 0),
@@ -269,9 +267,8 @@ class _Header extends StatelessWidget {
             child: Text(
               '${formatShortDate(range!.start)} – ${formatShortDate(range!.end)}',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
           IconButton(
@@ -293,9 +290,8 @@ class _Header extends StatelessWidget {
           child: Text(
             formatMonth(month),
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
         IconButton(
@@ -446,10 +442,13 @@ class _BigCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       label,
-                      style: theme.textTheme.labelMedium?.copyWith(color: color),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: color,
+                      ),
                     ),
                   ),
-                  if (selected) Icon(Icons.check_circle, size: 16, color: color),
+                  if (selected)
+                    Icon(Icons.check_circle, size: 16, color: color),
                 ],
               ),
               const SizedBox(height: 8),
@@ -494,144 +493,157 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final total = widget.data.byCategory
-        .fold<int>(0, (sum, category) => sum + category.amount);
-    final selected = _selectedIndex >= 0 &&
-            _selectedIndex < widget.data.byCategory.length
+    final total = widget.data.byCategory.fold<int>(
+      0,
+      (sum, category) => sum + category.amount,
+    );
+    final selected =
+        _selectedIndex >= 0 && _selectedIndex < widget.data.byCategory.length
         ? widget.data.byCategory[_selectedIndex]
         : null;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                widget.type == StatsType.income
-                    ? 'Income by category'
-                    : 'Spending by category',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            SegmentedButton<bool>(
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              segments: const [
-                ButtonSegment(value: false, label: Text('Amount')),
-                ButtonSegment(value: true, label: Text('Percent')),
-              ],
-              selected: {_percent},
-              onSelectionChanged: (value) =>
-                  setState(() => _percent = value.first),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 230,
-          child: Stack(
-            alignment: Alignment.center,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => setState(() => _selectedIndex = -1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              PieChart(
-                PieChartData(
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 56,
-                  startDegreeOffset: -90,
-                  pieTouchData: PieTouchData(
-                    touchCallback: (event, response) {
-                      if (event is FlTapUpEvent) {
-                        setState(() {
-                          _selectedIndex =
-                              response?.touchedSection?.touchedSectionIndex ??
-                                  -1;
-                        });
-                      }
-                    },
+              Expanded(
+                child: Text(
+                  widget.type == StatsType.income
+                      ? 'Income by category'
+                      : 'Spending by category',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-                  sections: [
-                    for (var i = 0; i < widget.data.byCategory.length; i++)
-                      PieChartSectionData(
-                        value: widget.data.byCategory[i].amount.toDouble(),
-                        color: colorFromDb(widget.data.byCategory[i].color),
-                        radius: _selectedIndex == i ? 64 : 50,
-                        showTitle: _selectedIndex == i,
-                        title: _selectedIndex == i
-                            ? (_percent
-                                ? '${_percentage(widget.data.byCategory[i].amount, total)}%'
-                                : formatMoney(
-                                    widget.data.byCategory[i].amount,
-                                    widget.data.currency,
-                                  ))
-                            : '',
-                        titleStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                  ],
                 ),
               ),
-              if (selected == null)
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Total',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    Text(
-                      _percent ? '100%' : formatMoney(total, widget.data.currency),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                )
-              else
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      iconForCategory(selected.icon),
-                      color: colorFromDb(selected.color),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _percent
-                          ? '${_percentage(selected.amount, total)}%'
-                          : formatMoney(selected.amount, widget.data.currency),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+              SegmentedButton<bool>(
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Amount')),
+                  ButtonSegment(value: true, label: Text('Percent')),
+                ],
+                selected: {_percent},
+                onSelectionChanged: (value) =>
+                    setState(() => _percent = value.first),
+              ),
             ],
           ),
-        ),
-        const SizedBox(height: 10),
-        for (var i = 0; i < widget.data.byCategory.length; i++)
-          _CategoryRow(
-            category: widget.data.byCategory[i],
-            currency: widget.data.currency,
-            percent: _percent,
-            total: total,
-            selected: _selectedIndex == i,
-            onTap: () => setState(
-              () => _selectedIndex = _selectedIndex == i ? -1 : i,
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 230,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 56,
+                    startDegreeOffset: -90,
+                    pieTouchData: PieTouchData(
+                      touchCallback: (event, response) {
+                        if (event is FlTapUpEvent) {
+                          final touched =
+                              response?.touchedSection?.touchedSectionIndex ??
+                              -1;
+                          setState(() {
+                            _selectedIndex = touched == _selectedIndex
+                                ? -1
+                                : touched;
+                          });
+                        }
+                      },
+                    ),
+                    sections: [
+                      for (var i = 0; i < widget.data.byCategory.length; i++)
+                        PieChartSectionData(
+                          value: widget.data.byCategory[i].amount.toDouble(),
+                          color: colorFromDb(widget.data.byCategory[i].color),
+                          radius: _selectedIndex == i ? 64 : 50,
+                          showTitle: _selectedIndex == i,
+                          title: _selectedIndex == i
+                              ? (_percent
+                                    ? '${_percentage(widget.data.byCategory[i].amount, total)}%'
+                                    : formatMoney(
+                                        widget.data.byCategory[i].amount,
+                                        widget.data.currency,
+                                      ))
+                              : '',
+                          titleStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (selected == null)
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Total',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        _percent
+                            ? '100%'
+                            : formatMoney(total, widget.data.currency),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        iconForCategory(selected.icon),
+                        color: colorFromDb(selected.color),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _percent
+                            ? '${_percentage(selected.amount, total)}%'
+                            : formatMoney(
+                                selected.amount,
+                                widget.data.currency,
+                              ),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-            onDoubleTap: () =>
-                widget.onOpenCategory(widget.data.byCategory[i]),
           ),
-      ],
+          const SizedBox(height: 10),
+          for (var i = 0; i < widget.data.byCategory.length; i++)
+            _CategoryRow(
+              category: widget.data.byCategory[i],
+              currency: widget.data.currency,
+              percent: _percent,
+              total: total,
+              selected: _selectedIndex == i,
+              onTap: () =>
+                  setState(() => _selectedIndex = _selectedIndex == i ? -1 : i),
+              onDoubleTap: () =>
+                  widget.onOpenCategory(widget.data.byCategory[i]),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -660,9 +672,7 @@ class _CategoryRow extends StatelessWidget {
     final theme = Theme.of(context);
     final color = colorFromDb(category.color);
     return Material(
-      color: selected
-          ? color.withValues(alpha: 0.16)
-          : Colors.transparent,
+      color: selected ? color.withValues(alpha: 0.16) : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
