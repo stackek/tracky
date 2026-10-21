@@ -1344,13 +1344,23 @@ class _TransactionList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final income = periodTotals?.income ?? 0;
+    final expense = periodTotals?.expense ?? 0;
     if (items.isEmpty) {
       return RefreshIndicator(
         onRefresh: onRefresh,
         child: ListView(
-          children: const [
-            SizedBox(height: 100),
-            EmptyState(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          children: [
+            _SummaryStrip(
+              income: income,
+              expense: expense,
+              currency: currency,
+              periodLabel: periodLabel,
+              onSelectPeriod: onSelectPeriod,
+            ),
+            const SizedBox(height: 80),
+            const EmptyState(
               icon: Icons.receipt_long_outlined,
               title: 'No transactions yet',
               message: 'Tap Add to record your first expense or income.',
@@ -1359,8 +1369,6 @@ class _TransactionList extends ConsumerWidget {
         ),
       );
     }
-    final income = periodTotals?.income ?? 0;
-    final expense = periodTotals?.expense ?? 0;
     final accountColors = {
       for (final account
           in ref.watch(accountsProvider).value ?? const <Account>[])
