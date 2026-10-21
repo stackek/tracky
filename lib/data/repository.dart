@@ -38,7 +38,7 @@ class Repository {
 
   Future<DateTime?> earliestTransactionDate() async {
     final rows = await db.rawQuery(
-      'SELECT MIN(date) AS d FROM transactions WHERE status != $statusVoid',
+      'SELECT MIN(date) AS d FROM transactions WHERE status != $statusVoid AND cr_status != \'VOID\'',
     );
     if (rows.isEmpty) return null;
     final value = asInt(rows.first['d']);

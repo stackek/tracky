@@ -177,6 +177,7 @@ extension TransactionRepository on Repository {
     for (final transaction in list) {
       if (!transaction.isSplit &&
           !transaction.isTransfer &&
+          !transaction.isVoid &&
           transaction.payeeId != null) {
         return transaction;
       }
@@ -191,6 +192,7 @@ extension TransactionRepository on Repository {
     for (final transaction in list) {
       if (!transaction.isSplit &&
           !transaction.isTransfer &&
+          !transaction.isVoid &&
           transaction.catId != null) {
         return transaction;
       }
@@ -283,9 +285,9 @@ extension TransactionRepository on Repository {
       'cr_status': crStatus,
       'number': number,
       'uuid': uuid ?? newUuid(),
-      'debt_id': debtId,
-      'original_amount': originalAmount,
-      'original_currency': originalCurrency,
+      'debt_id': crStatus == 'VOID' ? null : debtId,
+      'original_amount': crStatus == 'VOID' ? null : originalAmount,
+      'original_currency': crStatus == 'VOID' ? null : originalCurrency,
     });
   }
 
@@ -336,7 +338,7 @@ extension TransactionRepository on Repository {
         resultId = await _updateSimple(txn, existing, draft);
       }
 
-      if (draft.type != DraftType.transfer) {
+      if (draft.type != DraftType.transfer && draft.crStatus != 'VOID') {
         if (draft.parts.isNotEmpty) {
           final childIds = await _childIds(txn, resultId);
           for (var i = 0; i < draft.parts.length && i < childIds.length; i++) {
@@ -625,9 +627,12 @@ extension TransactionRepository on Repository {
         'date': toUnixTimestamp(draft.date),
         'value_date': toUnixTimestamp(draft.valueDate),
         'cr_status': draft.crStatus,
-        'debt_id': draft.resolveDebtId,
-        'original_amount': draft.resolveDebtId == null ? null : draft.debtAmount,
-        'original_currency': draft.resolveDebtId == null
+        'debt_id': draft.crStatus == 'VOID' ? null : draft.resolveDebtId,
+        'original_amount': draft.crStatus == 'VOID' || draft.resolveDebtId == null
+            ? null
+            : draft.debtAmount,
+        'original_currency':
+            draft.crStatus == 'VOID' || draft.resolveDebtId == null
             ? null
             : draft.debtCurrency,
       },
