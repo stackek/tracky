@@ -35,6 +35,13 @@ class StatsScreen extends ConsumerWidget {
         .where((account) => account.id == accountId)
         .firstOrNull;
     final statsData = stats.value;
+    final totalColor = statsData == null
+        ? null
+        : statsData.net < 0
+        ? theme.colorScheme.error
+        : theme.brightness == Brightness.dark
+        ? const Color(0xFF81C784)
+        : const Color(0xFF2E7D32);
 
     return Scaffold(
       appBar: AppBar(
@@ -46,7 +53,10 @@ class StatsScreen extends ConsumerWidget {
                   statsData.currency,
                   signed: true,
                 ),
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: totalColor,
+          ),
         ),
       ),
       body: GestureDetector(
