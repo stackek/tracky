@@ -1,6 +1,6 @@
 const appName = 'Tracky';
-const appVersion = '1.0.0';
-const appBuildNumber = 1;
+const appVersion = '1.0.1';
+const appBuildNumber = 2;
 const appVersionLabel = 'Version $appVersion';
 const repositoryUrl = 'https://github.com/stackek/tracky';
 const releasesUrl = '$repositoryUrl/releases';
@@ -20,6 +20,15 @@ class ChangelogEntry {
 const changelogEntries = <ChangelogEntry>[
   ChangelogEntry(
     version: appVersion,
+    date: '21 October 2026',
+    changes: [
+      'First F-Droid release of Tracky.',
+      'New application ID: com.stackek.tracky.',
+      'Added in-app changelog, source code and release links.',
+    ],
+  ),
+  ChangelogEntry(
+    version: '1.0.0',
     date: '21 October 2026',
     changes: [
       'First public release of Tracky.',

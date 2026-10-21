@@ -1,4 +1,4 @@
-package org.myexpensesopen.my_expenses_open
+package com.stackek.tracky
 
 import io.flutter.embedding.android.FlutterActivity
 

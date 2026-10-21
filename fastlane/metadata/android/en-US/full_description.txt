@@ -1,0 +1,19 @@
+Tracky is a free, open source, privacy-first expense tracker for Android.
+
+There are no payments, subscriptions, ads, analytics or accounts. Your data stays on your device unless you explicitly export it.
+
+Features:
+* Multiple accounts for cash, bank, credit card, assets, liabilities and investments
+* Expenses, income, transfers and split transactions
+* Hierarchical categories, payees, payment methods and tags
+* Receipt and photo attachments
+* Search and filters for accounts, dates, categories, payees, tags, amounts and void transactions
+* Statistics with selectable accounts and custom date ranges
+* Monthly budgets with per-category allocations
+* Reusable transaction templates
+* CSV export and import
+* Encrypted backup and restore
+
+Tracky can restore My Expenses backups, including encrypted .enc files.
+
+Tracky is licensed under the GNU General Public License v3.0. Source code: https://github.com/stackek/tracky

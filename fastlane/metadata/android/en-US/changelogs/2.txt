@@ -1,0 +1,1 @@
+First F-Droid release of Tracky. New application ID: com.stackek.tracky. Added in-app changelog, source code and release links.
