@@ -78,8 +78,18 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               '${filter.to == null ? '' : ' – ${formatShortDate(filter.to!)}'}'
         : filter.period.label;
 
-    return Scaffold(
-      appBar: AppBar(
+    return PopScope(
+      canPop: !_showSearch && !_selectionMode,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_showSearch) {
+          _closeSearch();
+        } else if (_selectionMode) {
+          setState(_selectedIds.clear);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
         title: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: _selectionMode
@@ -153,13 +163,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   tooltip: 'Search',
             icon: Icon(_showSearch ? Icons.close : Icons.search),
             onPressed: () {
-              final show = !_showSearch;
-              setState(() => _showSearch = show);
-              if (!show) {
-                _searchController.clear();
-                _searchFocus.unfocus();
-                ref.read(transactionFilterProvider.notifier).setSearch('');
+              if (_showSearch) {
+                _closeSearch();
               } else {
+                setState(() => _showSearch = true);
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted) _searchFocus.requestFocus();
                 });
@@ -272,7 +279,15 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 ],
               ),
             ),
+      ),
     );
+  }
+
+  void _closeSearch() {
+    setState(() => _showSearch = false);
+    _searchController.clear();
+    _searchFocus.unfocus();
+    ref.read(transactionFilterProvider.notifier).setSearch('');
   }
 
   Future<void> _deleteSelected() async {
@@ -1470,52 +1485,7 @@ class _TransactionTile extends ConsumerWidget {
         ? theme.colorScheme.tertiary
         : colorFromDb(transaction.categoryColor);
 
-    return Dismissible(
-      key: ValueKey('tx-${transaction.id}'),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: theme.colorScheme.error,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
-        child: Icon(Icons.delete_outline, color: theme.colorScheme.onError),
-      ),
-      confirmDismiss: (_) async {
-        return await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Delete transaction?'),
-                content: Text(
-                  isTransfer
-                      ? 'Both sides of this transfer will be deleted.'
-                      : 'This action cannot be undone.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-            ) ??
-            false;
-      },
-      onDismissed: (_) async {
-        try {
-          await ref.read(repositoryProvider).deleteTransaction(transaction.id);
-          invalidateTransactionData(ref);
-        } catch (error) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('Could not delete: $error')));
-          }
-        }
-      },
-      child: ListTile(
+    return ListTile(
         selected: selected,
         selectedTileColor: theme.colorScheme.primaryContainer.withValues(
           alpha: 0.35,
@@ -1616,7 +1586,6 @@ class _TransactionTile extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
