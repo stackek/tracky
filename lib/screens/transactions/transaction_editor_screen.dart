@@ -44,6 +44,7 @@ class _TransactionEditorScreenState
   bool _loading = true;
   bool _saving = false;
   bool _splitMode = false;
+  int? _splitOriginalTotal;
   int? _editId;
   DraftType _type = DraftType.expense;
   int? _accountId;
@@ -179,6 +180,7 @@ class _TransactionEditorScreenState
           );
         }
         if (existing.isSplit) {
+          _splitOriginalTotal = existing.amount.abs();
           final children = await repo.children(existing.id);
           for (final child in children) {
             var debtMode = DebtMode.none;
@@ -264,7 +266,9 @@ class _TransactionEditorScreenState
   }
 
   void _updateSplitTotal() {
-    final total = _parts.fold<int>(0, (sum, part) => sum + part.amount);
+    final total = _parts.isEmpty
+        ? (_splitOriginalTotal ?? 0)
+        : _parts.fold<int>(0, (sum, part) => sum + part.amount);
     final currency = _accountCurrency;
     _amountController.text = formatMoneyPlain(total.abs(), currency);
   }
@@ -273,17 +277,9 @@ class _TransactionEditorScreenState
     setState(() {
       _dirty = true;
       _splitMode = true;
-      if (_parts.isEmpty) {
-        final parsed = parseAmountToMinor(_amountController.text, _currency);
-        _parts.add(
-          SplitDraft(
-            categoryId: _categoryId,
-            amount: _type == DraftType.income
-                ? (parsed ?? 0)
-                : -(parsed ?? 0),
-          ),
-        );
-      }
+      _splitOriginalTotal =
+          parseAmountToMinor(_amountController.text, _currency) ??
+          _splitOriginalTotal;
       _updateSplitTotal();
     });
   }
@@ -313,6 +309,7 @@ class _TransactionEditorScreenState
       _dirty = true;
       _splitMode = false;
       _parts.clear();
+      _splitOriginalTotal = null;
     });
   }
 
@@ -945,7 +942,7 @@ class _TransactionEditorScreenState
     );
     final rateController = TextEditingController();
     final homeAmountController = TextEditingController();
-    var selectedCategory = initial?.categoryId;
+    var selectedCategory = initial?.categoryId ?? _categoryId;
     var expense = initial == null
         ? _type == DraftType.expense
         : initial.amount < 0;
@@ -1114,6 +1111,7 @@ class _TransactionEditorScreenState
                     Builder(
                       builder: (context) {
                         final total =
+                            _splitOriginalTotal ??
                             parseAmountToMinor(
                               _amountController.text,
                               _currency,
