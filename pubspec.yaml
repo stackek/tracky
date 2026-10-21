@@ -111,4 +111,4 @@ dependency_overrides:
   # toolchain. The platform-channel implementations are stable and keep the
   # build fully reproducible with the Nix Android SDK.
   path_provider_android: 2.2.23
-  shared_preferences_android: 2.4.1
+  shared_preferences_android: 2.4.28
