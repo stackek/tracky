@@ -79,13 +79,16 @@ const Map<String, IconData> _fontAwesomeIcons = {
 
 IconData iconForCategory(String? name) {
   if (name == null) return Icons.category_outlined;
-  return materialIcons[name] ?? _fontAwesomeIcons[name] ?? Icons.category_outlined;
+  return materialIcons[name] ??
+      _fontAwesomeIcons[name] ??
+      Icons.category_outlined;
 }
 
 final List<MapEntry<String, IconData>> allCategoryIcons = [
   ...materialIcons.entries,
-  ..._fontAwesomeIcons.entries
-      .where((entry) => !materialIcons.containsKey(entry.key)),
+  ..._fontAwesomeIcons.entries.where(
+    (entry) => !materialIcons.containsKey(entry.key),
+  ),
 ];
 
 String iconSearchLabel(String key) =>
@@ -108,11 +111,6 @@ IconData iconForAccountType(int type) {
     default:
       return Icons.account_balance_wallet_outlined;
   }
-}
-
-IconData iconForPaymentMethod(String? icon) {
-  if (icon == null) return Icons.payment;
-  return _fontAwesomeIcons[icon] ?? Icons.payment;
 }
 
 const Map<String, String> categoryIconChoices = {

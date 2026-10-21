@@ -60,32 +60,34 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
             return EmptyState(
               icon: Icons.account_balance_wallet_outlined,
               title: 'No accounts yet',
-              message:
-                  'Create a cash, bank or credit card account to start tracking.',
+              message: 'Create a cash or card account to start tracking.',
               actionLabel: 'Add account',
               onAction: () => context.push('/account/edit'),
             );
           }
-          final sorted = [...items]..sort((a, b) {
-            switch (_sort) {
-              case _AccountSort.nameAsc:
-                return a.label.toLowerCase().compareTo(b.label.toLowerCase());
-              case _AccountSort.nameDesc:
-                return b.label.toLowerCase().compareTo(a.label.toLowerCase());
-              case _AccountSort.lastDesc:
-                return _lastSeen(lastTransactions, b).compareTo(
-                  _lastSeen(lastTransactions, a),
-                );
-              case _AccountSort.lastAsc:
-                return _lastSeen(lastTransactions, a).compareTo(
-                  _lastSeen(lastTransactions, b),
-                );
-              case _AccountSort.amountDesc:
-                return b.balance.compareTo(a.balance);
-              case _AccountSort.amountAsc:
-                return a.balance.compareTo(b.balance);
-            }
-          });
+          final sorted = [...items]
+            ..sort((a, b) {
+              switch (_sort) {
+                case _AccountSort.nameAsc:
+                  return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+                case _AccountSort.nameDesc:
+                  return b.label.toLowerCase().compareTo(a.label.toLowerCase());
+                case _AccountSort.lastDesc:
+                  return _lastSeen(
+                    lastTransactions,
+                    b,
+                  ).compareTo(_lastSeen(lastTransactions, a));
+                case _AccountSort.lastAsc:
+                  return _lastSeen(
+                    lastTransactions,
+                    a,
+                  ).compareTo(_lastSeen(lastTransactions, b));
+                case _AccountSort.amountDesc:
+                  return b.balance.compareTo(a.balance);
+                case _AccountSort.amountAsc:
+                  return a.balance.compareTo(b.balance);
+              }
+            });
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(accountsProvider);
@@ -120,11 +122,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
       selected: _sort,
       entries: [
         for (final sort in _AccountSort.values)
-          PickerEntry(
-            value: sort,
-            label: sort.label,
-            icon: Icons.sort,
-          ),
+          PickerEntry(value: sort, label: sort.label, icon: Icons.sort),
       ],
     );
     if (value != null) setState(() => _sort = value);
@@ -173,27 +171,6 @@ class _AccountCard extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        if (account.isFavorite)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(Icons.star, size: 16, color: Colors.amber),
-                          ),
-                        if (account.isArchived)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                'Archived',
-                                style: theme.textTheme.labelSmall,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                     const SizedBox(height: 3),
@@ -226,49 +203,11 @@ class _AccountCard extends ConsumerWidget {
                   ),
                 ],
               ),
-              IconButton(
-                tooltip: 'Delete account',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _deleteAccount(context, ref),
-              ),
+              const Icon(Icons.chevron_right),
             ],
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${account.label}?'),
-        content: const Text(
-          'All transactions in this account will be deleted. '
-          'This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await ref.read(repositoryProvider).deleteAccount(account.id);
-      invalidateTransactionData(ref);
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not delete: $error')),
-        );
-      }
-    }
   }
 }

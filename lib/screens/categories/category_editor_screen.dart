@@ -68,10 +68,11 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
         _type = await _resolveType(category.type, _parentId);
         _color = category.color ?? categoryColorChoices.first;
         _icon = category.icon ?? 'category';
-        _blockedParentIds = (await ref
-                .read(repositoryProvider)
-                .categoryDescendants(category.id))
-            .toSet();
+        _blockedParentIds =
+            (await ref
+                    .read(repositoryProvider)
+                    .categoryDescendants(category.id))
+                .toSet();
       }
     } else if (widget.initialParentId != null) {
       final parent = await ref
@@ -128,246 +129,247 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
         if (!didPop) _confirmDiscard();
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(_categoryId == null ? 'New category' : 'Edit category'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-        children: [
-          TextField(
-            controller: _labelController,
-            autofocus: _categoryId == null,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              prefixIcon: Icon(Icons.label_outline),
+        appBar: AppBar(
+          title: Text(_categoryId == null ? 'New category' : 'Edit category'),
+          actions: [
+            if (_categoryId != null)
+              IconButton(
+                tooltip: 'Delete category',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _delete,
+              ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          children: [
+            TextField(
+              controller: _labelController,
+              autofocus: _categoryId == null,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                prefixIcon: Icon(Icons.label_outline),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          if (_parentId == null)
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(
-                  value: 1,
-                  label: Text('Expense'),
-                  icon: Icon(Icons.north_east),
-                ),
-                ButtonSegment(
-                  value: 2,
-                  label: Text('Income'),
-                  icon: Icon(Icons.south_west),
-                ),
-              ],
-              selected: {_type},
-              onSelectionChanged: (value) => setState(() {
-                _dirty = true;
-                _type = value.first;
-              }),
+            const SizedBox(height: 12),
+            if (_parentId == null)
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(
+                    value: 1,
+                    label: Text('Expense'),
+                    icon: Icon(Icons.north_east),
+                  ),
+                  ButtonSegment(
+                    value: 2,
+                    label: Text('Income'),
+                    icon: Icon(Icons.south_west),
+                  ),
+                ],
+                selected: {_type},
+                onSelectionChanged: (value) => setState(() {
+                  _dirty = true;
+                  _type = value.first;
+                }),
+              ),
+            const SizedBox(height: 12),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              leading: const Icon(Icons.account_tree_outlined),
+              title: const Text('Parent category'),
+              subtitle: Text(
+                _parentId == null
+                    ? 'None (top level)'
+                    : possibleParents
+                              .where((category) => category.id == _parentId)
+                              .firstOrNull
+                              ?.displayPath ??
+                          'None (top level)',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                final value = await showCategoryPicker(
+                  context,
+                  possibleParents,
+                  initialId: _parentId,
+                  allowNone: true,
+                );
+                if (value == null) return;
+                setState(() {
+                  _dirty = true;
+                  _parentId = value == noCategoryId ? null : value;
+                  final parent = possibleParents
+                      .where((category) => category.id == _parentId)
+                      .firstOrNull;
+                  if (parent != null) _type = parent.type;
+                });
+              },
             ),
-          const SizedBox(height: 12),
-          ListTile(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-            tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-            leading: const Icon(Icons.account_tree_outlined),
-            title: const Text('Parent category'),
-            subtitle: Text(
-              _parentId == null
-                  ? 'None (top level)'
-                  : possibleParents
-                            .where((category) => category.id == _parentId)
-                            .firstOrNull
-                            ?.displayPath ??
-                        'None (top level)',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              final value = await showCategoryPicker(
-                context,
-                possibleParents,
-                initialId: _parentId,
-                allowNone: true,
-              );
-              if (value == null) return;
-              setState(() {
-                _dirty = true;
-                _parentId = value == noCategoryId ? null : value;
-                final parent = possibleParents
-                    .where((category) => category.id == _parentId)
-                    .firstOrNull;
-                if (parent != null) _type = parent.type;
-              });
-            },
-          ),
-          const SizedBox(height: 20),
-          Text('Colour', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final color in palette)
-                InkWell(
-                  borderRadius: BorderRadius.circular(30),
-                  onTap: () => setState(() {
+            const SizedBox(height: 20),
+            Text('Colour', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final color in palette)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(30),
+                    onTap: () => setState(() {
                       _dirty = true;
                       _color = color;
                     }),
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: colorFromDb(color),
-                      shape: BoxShape.circle,
-                      border: _color == color
-                          ? Border.all(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              width: 3,
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: colorFromDb(color),
+                        shape: BoxShape.circle,
+                        border: _color == color
+                            ? Border.all(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                width: 3,
+                              )
+                            : null,
+                      ),
+                      child: _color == color
+                          ? const Icon(
+                              Icons.check,
+                              size: 18,
+                              color: Colors.white,
                             )
                           : null,
                     ),
-                    child: _color == color
-                        ? const Icon(Icons.check, size: 18, color: Colors.white)
-                        : null,
                   ),
-                ),
-              InkWell(
-                borderRadius: BorderRadius.circular(30),
-                onTap: _pickCustomColor,
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(
-                      colors: [
-                        Colors.red,
-                        Colors.yellow,
-                        Colors.green,
-                        Colors.cyan,
-                        Colors.blue,
-                        Colors.purple,
-                        Colors.red,
-                      ],
+                InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: _pickCustomColor,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(
+                        colors: [
+                          Colors.red,
+                          Colors.yellow,
+                          Colors.green,
+                          Colors.cyan,
+                          Colors.blue,
+                          Colors.purple,
+                          Colors.red,
+                        ],
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.colorize,
+                      size: 18,
+                      color: Colors.white,
                     ),
                   ),
-                  child: const Icon(
-                    Icons.colorize,
-                    size: 18,
-                    color: Colors.white,
-                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Text('Icon', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(width: 8),
+                Text(
+                  '${allCategoryIcons.length} icons',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _iconSearchController,
+              decoration: InputDecoration(
+                hintText: 'Search icons by name',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _iconSearch.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          _iconSearchController.clear();
+                          setState(() => _iconSearch = '');
+                        },
+                      ),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Text('Icon', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(width: 8),
-              Text(
-                '${allCategoryIcons.length} icons',
-                style: Theme.of(context).textTheme.bodySmall,
+              onChanged: (value) => setState(() => _iconSearch = value),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 280,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _iconSearchController,
-            decoration: InputDecoration(
-              hintText: 'Search icons by name',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _iconSearch.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () {
-                        _iconSearchController.clear();
-                        setState(() => _iconSearch = '');
+              child: iconChoices.isEmpty
+                  ? const Center(child: Text('No icons match your search'))
+                  : GridView.builder(
+                      padding: const EdgeInsets.all(10),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 6,
+                            mainAxisSpacing: 6,
+                            crossAxisSpacing: 6,
+                          ),
+                      itemCount: iconChoices.length,
+                      itemBuilder: (context, index) {
+                        final entry = iconChoices[index];
+                        final selected = entry.key == _icon;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () => setState(() {
+                            _dirty = true;
+                            _icon = entry.key;
+                          }),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? colorFromDb(_color).withValues(alpha: 0.22)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              border: selected
+                                  ? Border.all(
+                                      color: colorFromDb(_color),
+                                      width: 2,
+                                    )
+                                  : null,
+                            ),
+                            child: Tooltip(
+                              message: iconSearchLabel(entry.key),
+                              child: Icon(
+                                entry.value,
+                                color: selected
+                                    ? colorFromDb(_color)
+                                    : Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        );
                       },
                     ),
             ),
-            onChanged: (value) => setState(() => _iconSearch = value),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            height: 280,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: iconChoices.isEmpty
-                ? const Center(child: Text('No icons match your search'))
-                : GridView.builder(
-                    padding: const EdgeInsets.all(10),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 6,
-                          mainAxisSpacing: 6,
-                          crossAxisSpacing: 6,
-                        ),
-                    itemCount: iconChoices.length,
-                    itemBuilder: (context, index) {
-                      final entry = iconChoices[index];
-                      final selected = entry.key == _icon;
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() {
-                          _dirty = true;
-                          _icon = entry.key;
-                        }),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? colorFromDb(_color).withValues(alpha: 0.22)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                            border: selected
-                                ? Border.all(
-                                    color: colorFromDb(_color),
-                                    width: 2,
-                                  )
-                                : null,
-                          ),
-                          child: Tooltip(
-                            message: iconSearchLabel(entry.key),
-                            child: Icon(
-                              entry.value,
-                              color: selected
-                                  ? colorFromDb(_color)
-                                  : Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          if (_categoryId != null) ...[
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error,
-              ),
-              onPressed: _delete,
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Delete category'),
-            ),
           ],
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: FilledButton(
-            onPressed: _save,
-            child: const Text('Save category'),
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: FilledButton(
+              onPressed: _save,
+              child: const Text('Save category'),
+            ),
           ),
         ),
-      ),
       ),
     );
   }

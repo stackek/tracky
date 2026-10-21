@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/dates.dart';
+import '../../core/storage_access.dart';
 import '../../core/ui_utils.dart';
 import '../../data/auto_backup_service.dart';
 import '../../data/csv_service.dart';
@@ -29,6 +30,9 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     final prefs = ref.watch(preferencesProvider);
     final theme = Theme.of(context);
     final lastBackup = prefs.lastBackupAt;
+    final autoBackupService = ref.read(autoBackupServiceProvider);
+    final hasBackupFolder = autoBackupService.hasFolder;
+    final backupFolderLabel = prefs.autoBackupFolder;
     return Scaffold(
       appBar: AppBar(title: const Text('Backup and restore')),
       body: ListView(
@@ -84,13 +88,10 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
             ),
             value: prefs.autoBackupEnabled,
             onChanged: (value) async {
-              if (value &&
-                  (prefs.autoBackupFolder == null ||
-                      prefs.autoBackupFolder!.isEmpty)) {
+              if (value && !hasBackupFolder) {
                 await _pickAutoBackupFolder();
                 if (!mounted) return;
-                if (prefs.autoBackupFolder == null ||
-                    prefs.autoBackupFolder!.isEmpty) {
+                if (!ref.read(autoBackupServiceProvider).hasFolder) {
                   return;
                 }
               }
@@ -128,9 +129,11 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
             leading: const Icon(Icons.folder_outlined),
             title: const Text('Backup folder'),
             subtitle: Text(
-              prefs.autoBackupFolder == null || prefs.autoBackupFolder!.isEmpty
-                  ? 'Not selected'
-                  : prefs.autoBackupFolder!,
+              hasBackupFolder &&
+                      backupFolderLabel != null &&
+                      backupFolderLabel.isNotEmpty
+                  ? backupFolderLabel
+                  : 'Not selected',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _pickAutoBackupFolder,
@@ -216,12 +219,22 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   }
 
   Future<void> _pickAutoBackupFolder() async {
-    final path = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose backup folder',
-      initialDirectory: ref.read(preferencesProvider).autoBackupFolder,
-    );
-    if (path == null || !mounted) return;
-    ref.read(preferencesProvider).autoBackupFolder = path;
+    final prefs = ref.read(preferencesProvider);
+    if (StorageAccess.isSupported) {
+      final directory = await StorageAccess.pickDirectory(
+        initialUri: prefs.autoBackupFolderUri,
+      );
+      if (directory == null || !mounted) return;
+      prefs.autoBackupFolderUri = directory.uri;
+      prefs.autoBackupFolder = directory.label;
+    } else {
+      final path = await FilePicker.getDirectoryPath(
+        dialogTitle: 'Choose backup folder',
+        initialDirectory: prefs.autoBackupFolder,
+      );
+      if (path == null || !mounted) return;
+      prefs.autoBackupFolder = path;
+    }
     setState(() {});
   }
 
@@ -243,9 +256,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 controller: controller,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Repeat every',
-                ),
+                decoration: const InputDecoration(labelText: 'Repeat every'),
               ),
               const SizedBox(height: 12),
               ListTile(
@@ -297,15 +308,22 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   }
 
   Future<void> _runAutoBackupNow() async {
-    final result = await runWithProgress<File>(
+    final result = await runWithProgress<String>(
       context,
       'Creating automatic backup…',
       () => ref.read(autoBackupServiceProvider).runNow(),
     );
     if (result == null || !mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Backup saved to ${result.path}')));
+    final folder = ref.read(preferencesProvider).autoBackupFolder;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          folder == null || folder.isEmpty
+              ? 'Backup saved: $result'
+              : 'Backup saved to $folder: $result',
+        ),
+      ),
+    );
   }
 
   Future<void> _createBackup({required bool encrypted}) async {

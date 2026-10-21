@@ -24,14 +24,9 @@ class Account {
     required this.currency,
     required this.type,
     required this.color,
-    required this.grouping,
-    required this.excludeFromTotals,
-    required this.flag,
-    required this.sealed,
     required this.uuid,
     required this.description,
     required this.typeLabel,
-    required this.isAsset,
     required this.sortKey,
     required this.balance,
   });
@@ -42,40 +37,27 @@ class Account {
   final String currency;
   final int type;
   final int color;
-  final String grouping;
-  final bool excludeFromTotals;
-  final int flag;
-  final bool sealed;
   final String? uuid;
   final String description;
   final String typeLabel;
-  final bool isAsset;
   final int sortKey;
   final int balance;
-
-  bool get isArchived => flag == 2;
-  bool get isFavorite => flag == 1;
 
   String get typeDisplayName => accountTypeDisplayName(typeLabel, type);
 
   factory Account.fromMap(Map<String, Object?> map) => Account(
-        id: asIntOr(map['_id'], 0),
-        label: asStringOr(map['label']),
-        openingBalance: asIntOr(map['opening_balance'], 0),
-        currency: asStringOr(map['currency'], 'EUR'),
-        type: asIntOr(map['type'], 1),
-        color: asIntOr(map['color'], 0xFF90A4AE),
-        grouping: asStringOr(map['grouping'], 'NONE'),
-        excludeFromTotals: asBool(map['exclude_from_totals']),
-        flag: asIntOr(map['flag'], 0),
-        sealed: asBool(map['sealed']),
-        uuid: asString(map['uuid']),
-        description: asStringOr(map['description']),
-        typeLabel: asStringOr(map['type_label']),
-        isAsset: asBool(map['isAsset']),
-        sortKey: asIntOr(map['sort_key'], 0),
-        balance: asIntOr(map['balance'], 0),
-      );
+    id: asIntOr(map['_id'], 0),
+    label: asStringOr(map['label']),
+    openingBalance: asIntOr(map['opening_balance'], 0),
+    currency: asStringOr(map['currency'], 'EUR'),
+    type: asIntOr(map['type'], 1),
+    color: asIntOr(map['color'], 0xFF90A4AE),
+    uuid: asString(map['uuid']),
+    description: asStringOr(map['description']),
+    typeLabel: asStringOr(map['type_label']),
+    sortKey: asIntOr(map['sort_key'], 0),
+    balance: asIntOr(map['balance'], 0),
+  );
 }
 
 String accountTypeDisplayName(String label, int type) {
@@ -83,9 +65,9 @@ String accountTypeDisplayName(String label, int type) {
     case '_CASH_':
       return 'Cash';
     case '_BANK_':
-      return 'Bank account';
+      return 'Card';
     case '_CCARD_':
-      return 'Credit card';
+      return 'Card';
     case '_ASSET_':
       return 'Asset';
     case '_LIABILITY_':
@@ -97,15 +79,8 @@ String accountTypeDisplayName(String label, int type) {
     case 1:
       return 'Cash';
     case 2:
-      return 'Bank account';
     case 3:
-      return 'Credit card';
-    case 4:
-      return 'Asset';
-    case 5:
-      return 'Liability';
-    case 6:
-      return 'Investment';
+      return 'Card';
     default:
       return label.replaceAll('_', '');
   }
@@ -115,63 +90,32 @@ class AccountType {
   const AccountType({
     required this.id,
     required this.label,
-    required this.isAsset,
-    required this.supportsReconciliation,
     required this.sortKey,
   });
 
   final int id;
   final String label;
-  final bool isAsset;
-  final bool supportsReconciliation;
   final int sortKey;
 
   factory AccountType.fromMap(Map<String, Object?> map) => AccountType(
-        id: asIntOr(map['_id'], 0),
-        label: asStringOr(map['label']),
-        isAsset: asBool(map['isAsset'] ?? map['is_asset']),
-        supportsReconciliation:
-            asBool(map['supportsReconciliation'] ?? map['supports_reconciliation']),
-        sortKey: asIntOr(map['type_sort_key'], 0),
-      );
+    id: asIntOr(map['_id'], 0),
+    label: asStringOr(map['label']),
+    sortKey: asIntOr(map['type_sort_key'], 0),
+  );
 
   String get displayName {
     switch (label) {
       case '_CASH_':
         return 'Cash';
-      case '_BANK_':
-        return 'Bank account';
       case '_CCARD_':
-        return 'Credit card';
-      case '_ASSET_':
-        return 'Asset';
-      case '_LIABILITY_':
-        return 'Liability';
-      case '_INVST_':
-        return 'Investment';
+      case '_BANK_':
+        return 'Card';
       default:
         return label.replaceAll('_', '');
     }
   }
 
-  String get storageLabel {
-    switch (label) {
-      case '_CASH_':
-        return 'Cash';
-      case '_BANK_':
-        return 'Bank account';
-      case '_CCARD_':
-        return 'Credit card';
-      case '_ASSET_':
-        return 'Asset';
-      case '_LIABILITY_':
-        return 'Liability';
-      case '_INVST_':
-        return 'Investment';
-      default:
-        return label;
-    }
-  }
+  String get storageLabel => label;
 }
 
 class Category {
@@ -211,93 +155,47 @@ class Category {
       path ?? (parentLabel == null ? label : '$parentLabel > $label');
 
   factory Category.fromMap(Map<String, Object?> map) => Category(
-        id: asIntOr(map['_id'], 0),
-        label: asStringOr(map['label']),
-        parentId: asInt(map['parent_id']),
-        type: asIntOr(map['type'], 0),
-        color: asInt(map['color']),
-        icon: asString(map['icon']),
-        uuid: asString(map['uuid']),
-        usages: asIntOr(map['usages'], 0),
-        parentLabel: asString(map['parent_label']),
-        path: asString(map['path']),
-      );
+    id: asIntOr(map['_id'], 0),
+    label: asStringOr(map['label']),
+    parentId: asInt(map['parent_id']),
+    type: asIntOr(map['type'], 0),
+    color: asInt(map['color']),
+    icon: asString(map['icon']),
+    uuid: asString(map['uuid']),
+    usages: asIntOr(map['usages'], 0),
+    parentLabel: asString(map['parent_label']),
+    path: asString(map['path']),
+  );
 
   Category copyWith({List<Category>? children}) => Category(
-        id: id,
-        label: label,
-        parentId: parentId,
-        type: type,
-        color: color,
-        icon: icon,
-        uuid: uuid,
-        usages: usages,
-        parentLabel: parentLabel,
-        path: path,
-        children: children ?? this.children,
-      );
+    id: id,
+    label: label,
+    parentId: parentId,
+    type: type,
+    color: color,
+    icon: icon,
+    uuid: uuid,
+    usages: usages,
+    parentLabel: parentLabel,
+    path: path,
+    children: children ?? this.children,
+  );
 }
 
 class Payee {
-  const Payee({
-    required this.id,
-    required this.name,
-    this.shortName,
-    this.iban,
-  });
+  const Payee({required this.id, required this.name, this.description});
 
   final int id;
   final String name;
-  final String? shortName;
-  final String? iban;
+  final String? description;
 
-  String get displayName =>
-      (shortName != null && shortName!.isNotEmpty) ? shortName! : name;
+  String get displayName => name;
 
   factory Payee.fromMap(Map<String, Object?> map) => Payee(
-        id: asIntOr(map['_id'], 0),
-        name: asStringOr(map['name']),
-        shortName: asString(map['short_name']),
-        iban: asString(map['iban']),
-      );
-}
-
-class PaymentMethod {
-  const PaymentMethod({
-    required this.id,
-    required this.label,
-    required this.icon,
-    required this.type,
-  });
-
-  final int id;
-  final String label;
-  final String? icon;
-  final int type;
-
-  String get displayName {
-    switch (label) {
-      case '__NULL__':
-        return 'None';
-      case 'CHEQUE':
-        return 'Cheque';
-      case 'CREDITCARD':
-        return 'Credit card';
-      case 'DEPOSIT':
-        return 'Deposit';
-      case 'DIRECTDEBIT':
-        return 'Direct debit';
-      default:
-        return label;
-    }
-  }
-
-  factory PaymentMethod.fromMap(Map<String, Object?> map) => PaymentMethod(
-        id: asIntOr(map['_id'], 0),
-        label: asStringOr(map['label']),
-        icon: asString(map['icon']),
-        type: asIntOr(map['type'], 0),
-      );
+    id: asIntOr(map['_id'], 0),
+    name: asStringOr(map['name']),
+    description: asString(map['description']),
+  );
 }
 
 class Tag {
@@ -308,10 +206,10 @@ class Tag {
   final int? color;
 
   factory Tag.fromMap(Map<String, Object?> map) => Tag(
-        id: asIntOr(map['_id'], 0),
-        label: asStringOr(map['label']),
-        color: asInt(map['color']),
-      );
+    id: asIntOr(map['_id'], 0),
+    label: asStringOr(map['label']),
+    color: asInt(map['color']),
+  );
 }
 
 class Transaction {
@@ -329,7 +227,6 @@ class Transaction {
     this.payeeId,
     this.transferPeer,
     this.transferAccount,
-    this.methodId,
     this.parentId,
     this.number,
     this.originalAmount,
@@ -341,7 +238,6 @@ class Transaction {
     this.categoryColor,
     this.categoryType,
     this.payeeName,
-    this.methodLabel,
     this.accountLabel,
     this.accountCurrency = 'EUR',
     this.transferAccountLabel,
@@ -361,7 +257,6 @@ class Transaction {
   final int? payeeId;
   final int? transferPeer;
   final int? transferAccount;
-  final int? methodId;
   final int? parentId;
   final int status;
   final String crStatus;
@@ -376,7 +271,6 @@ class Transaction {
   final int? categoryColor;
   final int? categoryType;
   final String? payeeName;
-  final String? methodLabel;
   final String? accountLabel;
   final String accountCurrency;
   final String? transferAccountLabel;
@@ -402,7 +296,9 @@ class Transaction {
     if (isSplit) return comment.isNotEmpty ? comment : 'Split transaction';
     if (payeeName != null && payeeName!.isNotEmpty) return payeeName!;
     if (comment.isNotEmpty) return comment;
-    if (categoryLabel != null && categoryLabel!.isNotEmpty) return categoryLabel!;
+    if (categoryLabel != null && categoryLabel!.isNotEmpty) {
+      return categoryLabel!;
+    }
     return 'Uncategorized';
   }
 
@@ -427,14 +323,15 @@ class Transaction {
       id: asIntOr(map['_id'], 0),
       comment: asStringOr(map['comment']),
       date: fromUnixTimestamp(asIntOr(map['date'], 0)),
-      valueDate: fromUnixTimestamp(asIntOr(map['value_date'], asIntOr(map['date'], 0))),
+      valueDate: fromUnixTimestamp(
+        asIntOr(map['value_date'], asIntOr(map['date'], 0)),
+      ),
       amount: asIntOr(map['amount'], 0),
       catId: asInt(map['cat_id']),
       accountId: asIntOr(map['account_id'], 0),
       payeeId: asInt(map['payee_id']),
       transferPeer: asInt(map['transfer_peer']),
       transferAccount: asInt(map['transfer_account']),
-      methodId: asInt(map['method_id']),
       parentId: asInt(map['parent_id']),
       status: asIntOr(map['status'], 0),
       crStatus: asStringOr(map['cr_status'], 'RECONCILED'),
@@ -449,18 +346,13 @@ class Transaction {
       categoryColor: asInt(map['cat_color']),
       categoryType: asInt(map['cat_type']),
       payeeName: asString(map['payee_name']),
-      methodLabel: asString(map['method_label']),
       accountLabel: asString(map['account_label']),
       accountCurrency: asStringOr(map['currency'], 'EUR'),
       transferAccountLabel: asString(map['transfer_account_label']),
       transferAccountCurrency: asString(map['transfer_account_currency']),
       tagIds: tagString == null || tagString.isEmpty
           ? const []
-          : tagString
-              .split(',')
-              .map(int.tryParse)
-              .whereType<int>()
-              .toList(),
+          : tagString.split(',').map(int.tryParse).whereType<int>().toList(),
       attachmentCount: asIntOr(map['attachment_count'], 0),
       splitCount: asIntOr(map['split_count'], 0),
     );
@@ -473,7 +365,14 @@ enum TransactionFlowFilter { both, income, expense }
 
 enum TransactionVoidFilter { both, voidOnly, nonVoid }
 
-enum TransactionPeriod { all, thisMonth, lastMonth, last3Months, thisYear, custom }
+enum TransactionPeriod {
+  all,
+  thisMonth,
+  lastMonth,
+  last3Months,
+  thisYear,
+  custom,
+}
 
 extension TransactionPeriodLabel on TransactionPeriod {
   String get label {
@@ -580,25 +479,24 @@ class TransactionFilter {
     TransactionFlowFilter? flow,
     TransactionVoidFilter? voidFilter,
     TransactionPeriod? period,
-  }) =>
-      TransactionFilter(
-        accountId: clearAccount ? null : (accountId ?? this.accountId),
-        search: search ?? this.search,
-        from: clearDates ? null : (from ?? this.from),
-        to: clearDates ? null : (to ?? this.to),
-        categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
-        payeeId: clearPayee ? null : (payeeId ?? this.payeeId),
-        tagId: clearTag ? null : (tagId ?? this.tagId),
-        minAmount: clearAmounts || clearMinAmount
-            ? null
-            : (minAmount ?? this.minAmount),
-        maxAmount: clearAmounts || clearMaxAmount
-            ? null
-            : (maxAmount ?? this.maxAmount),
-        flow: flow ?? this.flow,
-        voidFilter: voidFilter ?? this.voidFilter,
-        period: period ?? this.period,
-      );
+  }) => TransactionFilter(
+    accountId: clearAccount ? null : (accountId ?? this.accountId),
+    search: search ?? this.search,
+    from: clearDates ? null : (from ?? this.from),
+    to: clearDates ? null : (to ?? this.to),
+    categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
+    payeeId: clearPayee ? null : (payeeId ?? this.payeeId),
+    tagId: clearTag ? null : (tagId ?? this.tagId),
+    minAmount: clearAmounts || clearMinAmount
+        ? null
+        : (minAmount ?? this.minAmount),
+    maxAmount: clearAmounts || clearMaxAmount
+        ? null
+        : (maxAmount ?? this.maxAmount),
+    flow: flow ?? this.flow,
+    voidFilter: voidFilter ?? this.voidFilter,
+    period: period ?? this.period,
+  );
 
   bool get isActive =>
       accountId != null ||
@@ -614,8 +512,6 @@ class TransactionFilter {
       voidFilter != TransactionVoidFilter.both ||
       period != TransactionPeriod.thisMonth;
 }
-
-enum DebtMode { none, create, resolve }
 
 class Debt {
   const Debt({
@@ -649,33 +545,21 @@ class Debt {
   bool get isClosed => currentBalance == 0;
 
   factory Debt.fromMap(Map<String, Object?> map) => Debt(
-        id: asIntOr(map['_id'], 0),
-        payeeId: asInt(map['payee_id']),
-        label: asStringOr(map['label']),
-        description: asStringOr(map['description']),
-        date: fromUnixTimestamp(asIntOr(map['date'], 0)),
-        amount: asIntOr(map['amount'], 0),
-        currency: asStringOr(map['currency'], 'EUR'),
-        equivalentAmount: asInt(map['equivalent_amount']),
-        sealed: asBool(map['sealed']),
-        payeeName: asString(map['payee_name']),
-        balance: asInt(map['balance']),
-      );
+    id: asIntOr(map['_id'], 0),
+    payeeId: asInt(map['payee_id']),
+    label: asStringOr(map['label']),
+    description: asStringOr(map['description']),
+    date: fromUnixTimestamp(asIntOr(map['date'], 0)),
+    amount: asIntOr(map['amount'], 0),
+    currency: asStringOr(map['currency'], 'EUR'),
+    equivalentAmount: asInt(map['equivalent_amount']),
+    sealed: asBool(map['sealed']),
+    payeeName: asString(map['payee_name']),
+    balance: asInt(map['balance']),
+  );
 }
-
-enum DebtTransactionFilter { all, increasing, resolving }
 
 enum DebtRemovalAction { deleteTransactions, reassign, detach }
-
-class DebtTransactionEntry {
-  const DebtTransactionEntry({
-    required this.transaction,
-    required this.resolving,
-  });
-
-  final Transaction transaction;
-  final bool resolving;
-}
 
 class Budget {
   const Budget({
@@ -701,16 +585,16 @@ class Budget {
   final int totalBudget;
 
   factory Budget.fromMap(Map<String, Object?> map) => Budget(
-        id: asIntOr(map['_id'], 0),
-        title: asStringOr(map['title']),
-        description: asStringOr(map['description']),
-        grouping: asStringOr(map['grouping'], 'MONTH'),
-        accountId: asInt(map['account_id']),
-        currency: asStringOr(map['currency'], 'EUR'),
-        isDefault: asBool(map['is_default']),
-        uuid: asString(map['uuid']),
-        totalBudget: asIntOr(map['total_budget'], 0),
-      );
+    id: asIntOr(map['_id'], 0),
+    title: asStringOr(map['title']),
+    description: asStringOr(map['description']),
+    grouping: asStringOr(map['grouping'], 'MONTH'),
+    accountId: asInt(map['account_id']),
+    currency: asStringOr(map['currency'], 'EUR'),
+    isDefault: asBool(map['is_default']),
+    uuid: asString(map['uuid']),
+    totalBudget: asIntOr(map['total_budget'], 0),
+  );
 }
 
 class BudgetAllocation {
@@ -748,7 +632,6 @@ class Template {
     required this.catId,
     required this.accountId,
     required this.payeeId,
-    required this.methodId,
     required this.transferAccount,
     required this.uuid,
     required this.status,
@@ -768,7 +651,6 @@ class Template {
   final int? catId;
   final int accountId;
   final int? payeeId;
-  final int? methodId;
   final int? transferAccount;
   final String? uuid;
   final int status;
@@ -781,25 +663,24 @@ class Template {
   final String? payeeName;
 
   factory Template.fromMap(Map<String, Object?> map) => Template(
-        id: asIntOr(map['_id'], 0),
-        title: asStringOr(map['title']),
-        comment: asStringOr(map['comment']),
-        amount: asIntOr(map['amount'], 0),
-        catId: asInt(map['cat_id']),
-        accountId: asIntOr(map['account_id'], 0),
-        payeeId: asInt(map['payee_id']),
-        methodId: asInt(map['method_id']),
-        transferAccount: asInt(map['transfer_account']),
-        uuid: asString(map['uuid']),
-        status: asIntOr(map['status'], 0),
-        categoryLabel: asString(map['cat_label']),
-        categoryIcon: asString(map['cat_icon']),
-        categoryColor: asInt(map['cat_color']),
-        categoryPath: asString(map['cat_path']),
-        accountLabel: asString(map['account_label']),
-        currency: asStringOr(map['currency'], 'EUR'),
-        payeeName: asString(map['payee_name']),
-      );
+    id: asIntOr(map['_id'], 0),
+    title: asStringOr(map['title']),
+    comment: asStringOr(map['comment']),
+    amount: asIntOr(map['amount'], 0),
+    catId: asInt(map['cat_id']),
+    accountId: asIntOr(map['account_id'], 0),
+    payeeId: asInt(map['payee_id']),
+    transferAccount: asInt(map['transfer_account']),
+    uuid: asString(map['uuid']),
+    status: asIntOr(map['status'], 0),
+    categoryLabel: asString(map['cat_label']),
+    categoryIcon: asString(map['cat_icon']),
+    categoryColor: asInt(map['cat_color']),
+    categoryPath: asString(map['cat_path']),
+    accountLabel: asString(map['account_label']),
+    currency: asStringOr(map['currency'], 'EUR'),
+    payeeName: asString(map['payee_name']),
+  );
 }
 
 class Attachment {
@@ -808,10 +689,8 @@ class Attachment {
   final int id;
   final String uri;
 
-  factory Attachment.fromMap(Map<String, Object?> map) => Attachment(
-        id: asIntOr(map['_id'], 0),
-        uri: asStringOr(map['uri']),
-      );
+  factory Attachment.fromMap(Map<String, Object?> map) =>
+      Attachment(id: asIntOr(map['_id'], 0), uri: asStringOr(map['uri']));
 }
 
 class CurrencyInfo {
@@ -873,6 +752,8 @@ class StatsData {
     required this.monthly,
     required this.byCategoryExpense,
     required this.byCategoryIncome,
+    required this.directExpenseAmounts,
+    required this.directIncomeAmounts,
     required this.currency,
   });
 
@@ -881,10 +762,15 @@ class StatsData {
   final List<MonthlyTotal> monthly;
   final List<CategoryTotal> byCategoryExpense;
   final List<CategoryTotal> byCategoryIncome;
+  final Map<int, int> directExpenseAmounts;
+  final Map<int, int> directIncomeAmounts;
   final String currency;
 
   List<CategoryTotal> byCategoryFor(StatsType type) =>
       type == StatsType.income ? byCategoryIncome : byCategoryExpense;
+
+  Map<int, int> directAmountsFor(StatsType type) =>
+      type == StatsType.income ? directIncomeAmounts : directExpenseAmounts;
 
   int get net => income + expense;
 }

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
-import '../../widgets/category_picker.dart';
 import '../../widgets/empty_state.dart';
 
 class CategoriesScreen extends ConsumerStatefulWidget {
@@ -50,9 +49,8 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
                 title: 'Expenses',
                 icon: Icons.north_east,
                 expanded: _expensesExpanded,
-                onToggle: () => setState(
-                  () => _expensesExpanded = !_expensesExpanded,
-                ),
+                onToggle: () =>
+                    setState(() => _expensesExpanded = !_expensesExpanded),
               ),
               if (_expensesExpanded)
                 for (final category in expenses)
@@ -62,9 +60,8 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
                   title: 'Income',
                   icon: Icons.south_west,
                   expanded: _incomeExpanded,
-                  onToggle: () => setState(
-                    () => _incomeExpanded = !_incomeExpanded,
-                  ),
+                  onToggle: () =>
+                      setState(() => _incomeExpanded = !_incomeExpanded),
                 ),
                 if (_incomeExpanded)
                   for (final category in incomes)
@@ -106,9 +103,8 @@ class _SectionHeader extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               title,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(context).textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const Spacer(),
             AnimatedRotation(
@@ -162,11 +158,6 @@ class _CategoryTileState extends ConsumerState<_CategoryTile> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                tooltip: 'Delete category',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _deleteCategory(context, category),
-              ),
               if (hasChildren)
                 IconButton(
                   tooltip: _expanded ? 'Collapse' : 'Expand',
@@ -201,99 +192,5 @@ class _CategoryTileState extends ConsumerState<_CategoryTile> {
       item.label,
       style: const TextStyle(fontWeight: FontWeight.w500),
     );
-  }
-
-  Future<void> _deleteCategory(BuildContext context, Category item) async {
-    final repo = ref.read(repositoryProvider);
-    final count = await repo.categoryTransactionCount(item.id);
-    if (!context.mounted) return;
-
-    if (count == 0) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Delete ${item.label}?'),
-          content: const Text('This cannot be undone.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      await repo.deleteCategoryWithTransactions(
-        item.id,
-        deleteTransactions: false,
-      );
-      _refresh();
-      return;
-    }
-
-    final action = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${item.label}?'),
-        content: Text(
-          '$count transactions are assigned to this category. '
-          'What should happen to them?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop('move'),
-            child: const Text('Assign category'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop('delete'),
-            child: const Text('Delete transactions'),
-          ),
-        ],
-      ),
-    );
-    if (action == null || !context.mounted) return;
-
-    if (action == 'delete') {
-      await repo.deleteCategoryWithTransactions(
-        item.id,
-        deleteTransactions: true,
-      );
-      _refresh();
-      return;
-    }
-
-    final categories = ref.read(categoriesProvider).value ?? const <Category>[];
-    final descendants = (await repo.categoryDescendants(item.id)).toSet();
-    final possible = categories
-        .where((category) => !descendants.contains(category.id))
-        .toList();
-    if (!context.mounted) return;
-    final target = await showCategoryPicker(
-      context,
-      possible,
-      initialId: item.parentId,
-      allowNone: true,
-    );
-    if (target == null) return;
-    await repo.deleteCategoryWithTransactions(
-      item.id,
-      deleteTransactions: false,
-      targetCategoryId: target == noCategoryId ? null : target,
-    );
-    _refresh();
-  }
-
-  void _refresh() {
-    ref.invalidate(categoriesProvider);
-    ref.invalidate(categoryTreeProvider);
-    invalidateTransactionData(ref);
   }
 }

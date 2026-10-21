@@ -31,9 +31,6 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
   int _type = 1;
   String _currency = 'EUR';
   int _color = categoryColorChoices.first;
-  bool _excludeFromTotals = false;
-  int _flag = 0;
-  String _grouping = 'NONE';
 
   @override
   void initState() {
@@ -71,9 +68,6 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
         _type = account.type;
         _currency = account.currency;
         _color = account.color;
-        _excludeFromTotals = account.excludeFromTotals;
-        _flag = account.flag;
-        _grouping = account.grouping;
       }
     }
     _dirty = false;
@@ -95,218 +89,173 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
         if (!didPop) _confirmDiscard();
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(_accountId == null ? 'New account' : 'Edit account'),
-        actions: [
-          if (_accountId != null)
-            IconButton(
-              tooltip: 'Delete',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _delete,
-            ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-        children: [
-          TextField(
-            controller: _labelController,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Account name',
-              prefixIcon: Icon(Icons.label_outline),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-            tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-            leading: const Icon(Icons.category_outlined),
-            title: const Text('Account type'),
-            subtitle: Text(
-              types
-                      .where((type) => type.id == _type)
-                      .firstOrNull
-                      ?.displayName ??
-                  'None',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              final value = await showSearchPicker<int>(
-                context: context,
-                title: 'Account type',
-                hint: 'Search account types',
-                selected: _type,
-                entries: [
-                  for (final type in types)
-                    PickerEntry(
-                      value: type.id,
-                      label: type.displayName,
-                      subtitle: type.isAsset ? 'Asset' : 'Liability',
-                      icon: type.isAsset
-                          ? Icons.trending_up
-                          : Icons.trending_down,
-                    ),
-                ],
-              );
-              if (value != null) {
-                setState(() {
-                  _dirty = true;
-                  _type = value;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () async {
-              final result = await showCurrencyPicker(
-                context,
-                currencies,
-                selected: _currency,
-              );
-              if (result != null) {
-                setState(() {
-                  _dirty = true;
-                  _currency = result;
-                });
-              }
-            },
-            child: InputDecorator(
+        appBar: AppBar(
+          title: Text(_accountId == null ? 'New account' : 'Edit account'),
+          actions: [
+            if (_accountId != null)
+              IconButton(
+                tooltip: 'Delete',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _delete,
+              ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          children: [
+            TextField(
+              controller: _labelController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
-                labelText: 'Currency',
-                prefixIcon: Icon(Icons.public),
-              ),
-              child: Row(
-                children: [
-                  Expanded(child: Text(_currency)),
-                  const Icon(Icons.chevron_right),
-                ],
+                labelText: 'Account name',
+                prefixIcon: Icon(Icons.label_outline),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _openingBalanceController,
-            keyboardType: const TextInputType.numberWithOptions(
-              decimal: true,
-              signed: true,
+            const SizedBox(height: 12),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              leading: const Icon(Icons.category_outlined),
+              title: const Text('Account type'),
+              subtitle: Text(
+                types
+                        .where((type) => type.id == _type)
+                        .firstOrNull
+                        ?.displayName ??
+                    'None',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                final value = await showSearchPicker<int>(
+                  context: context,
+                  title: 'Account type',
+                  hint: 'Search account types',
+                  selected: _type,
+                  entries: [
+                    for (final type in types)
+                      PickerEntry(
+                        value: type.id,
+                        label: type.displayName,
+                        icon: Icons.account_balance_wallet_outlined,
+                      ),
+                  ],
+                );
+                if (value != null) {
+                  setState(() {
+                    _dirty = true;
+                    _type = value;
+                  });
+                }
+              },
             ),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[-0-9.,]')),
-            ],
-            decoration: InputDecoration(
-              labelText: 'Opening balance',
-              prefixIcon: const Icon(Icons.account_balance),
-              suffixText: _currency,
-              helperText: 'The balance before the first transaction',
+            const SizedBox(height: 12),
+            InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () async {
+                final result = await showCurrencyPicker(
+                  context,
+                  currencies,
+                  selected: _currency,
+                );
+                if (result != null) {
+                  setState(() {
+                    _dirty = true;
+                    _currency = result;
+                  });
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Currency',
+                  prefixIcon: Icon(Icons.public),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(_currency)),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descriptionController,
-            minLines: 1,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Description',
-              prefixIcon: Icon(Icons.notes),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _openingBalanceController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[-0-9.,]')),
+              ],
+              decoration: InputDecoration(
+                labelText: 'Opening balance',
+                prefixIcon: const Icon(Icons.account_balance),
+                suffixText: _currency,
+                helperText: 'The balance before the first transaction',
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Text('Colour', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final color in categoryColorChoices)
-                InkWell(
-                  borderRadius: BorderRadius.circular(30),
-                  onTap: () => setState(() {
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descriptionController,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                prefixIcon: Icon(Icons.notes),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text('Colour', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final color in categoryColorChoices)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(30),
+                    onTap: () => setState(() {
                       _dirty = true;
                       _color = color;
                     }),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: colorFromDb(color),
-                      shape: BoxShape.circle,
-                      border: _color == color
-                          ? Border.all(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              width: 3,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colorFromDb(color),
+                        shape: BoxShape.circle,
+                        border: _color == color
+                            ? Border.all(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                width: 3,
+                              )
+                            : null,
+                      ),
+                      child: _color == color
+                          ? const Icon(
+                              Icons.check,
+                              size: 20,
+                              color: Colors.white,
                             )
                           : null,
                     ),
-                    child: _color == color
-                        ? const Icon(Icons.check, size: 20, color: Colors.white)
-                        : null,
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Exclude from totals'),
-            subtitle: const Text('Hide this account in the grand total'),
-            value: _excludeFromTotals,
-            onChanged: (value) => setState(() {
-                      _dirty = true;
-                      _excludeFromTotals = value;
-                    }),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            initialValue: _flag,
-            decoration: const InputDecoration(
-              labelText: 'Status',
-              prefixIcon: Icon(Icons.flag_outlined),
+              ],
             ),
-            items: const [
-              DropdownMenuItem(value: 0, child: Text('Normal')),
-              DropdownMenuItem(value: 1, child: Text('Favourite')),
-              DropdownMenuItem(value: 2, child: Text('Archived')),
-            ],
-            onChanged: (value) => setState(() {
-                      _dirty = true;
-                      _flag = value ?? 0;
-                    }),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _grouping,
-            decoration: const InputDecoration(
-              labelText: 'Grouping in transaction list',
-              prefixIcon: Icon(Icons.view_agenda_outlined),
+            const SizedBox(height: 20),
+          ],
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: FilledButton(
+              onPressed: _save,
+              child: const Text('Save account'),
             ),
-            items: const [
-              DropdownMenuItem(value: 'NONE', child: Text('None')),
-              DropdownMenuItem(value: 'DAY', child: Text('Day')),
-              DropdownMenuItem(value: 'WEEK', child: Text('Week')),
-              DropdownMenuItem(value: 'MONTH', child: Text('Month')),
-              DropdownMenuItem(value: 'YEAR', child: Text('Year')),
-            ],
-            onChanged: (value) => setState(() {
-                      _dirty = true;
-                      _grouping = value ?? 'NONE';
-                    }),
-          ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: FilledButton(
-            onPressed: _save,
-            child: const Text('Save account'),
           ),
         ),
-      ),
       ),
     );
   }
@@ -354,9 +303,6 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
         openingBalance: opening,
         description: _descriptionController.text.trim(),
         color: _color,
-        grouping: _grouping,
-        excludeFromTotals: _excludeFromTotals,
-        flag: _flag,
       );
     } else {
       await repo.updateAccount(
@@ -367,9 +313,6 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
         openingBalance: opening,
         description: _descriptionController.text.trim(),
         color: _color,
-        grouping: _grouping,
-        excludeFromTotals: _excludeFromTotals,
-        flag: _flag,
       );
     }
     invalidateTransactionData(ref);

@@ -100,6 +100,8 @@ class AboutScreen extends ConsumerWidget {
             leading: const Icon(Icons.gavel_outlined),
             title: const Text('Licence'),
             subtitle: const Text('GNU General Public License v3.0'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => openLicencePage(context),
           ),
           const SizedBox(height: 24),
           Center(

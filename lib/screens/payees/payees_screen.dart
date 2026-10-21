@@ -19,6 +19,8 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
   @override
   Widget build(BuildContext context) {
     final payees = ref.watch(payeesProvider);
+    final counts =
+        ref.watch(payeeTransactionCountsProvider).value ?? const <int, int>{};
     return Scaffold(
       appBar: AppBar(title: const Text('Payees')),
       floatingActionButton: FloatingActionButton(
@@ -59,6 +61,15 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {
                           final payee = filtered[index];
+                          final count = counts[payee.id] ?? 0;
+                          final subtitle = [
+                            if (payee.description != null &&
+                                payee.description!.isNotEmpty)
+                              payee.description!,
+                            count == 1
+                                ? '1 transaction'
+                                : '$count transactions',
+                          ].join(' • ');
                           return ListTile(
                             leading: CircleAvatar(
                               child: Text(
@@ -68,9 +79,7 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
                               ),
                             ),
                             title: Text(payee.name),
-                            subtitle: payee.iban == null || payee.iban!.isEmpty
-                                ? null
-                                : Text(payee.iban!),
+                            subtitle: Text(subtitle),
                             onTap: () => _edit(payee),
                             trailing: IconButton(
                               tooltip: 'Delete payee',
@@ -93,8 +102,7 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
 
   Future<void> _edit([Payee? payee]) async {
     final name = TextEditingController(text: payee?.name ?? '');
-    final shortName = TextEditingController(text: payee?.shortName ?? '');
-    final iban = TextEditingController(text: payee?.iban ?? '');
+    final description = TextEditingController(text: payee?.description ?? '');
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -111,14 +119,10 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
               ),
               const SizedBox(height: 10),
               TextField(
-                controller: shortName,
-                decoration: const InputDecoration(labelText: 'Short name'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: iban,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(labelText: 'IBAN'),
+                controller: description,
+                minLines: 1,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'Description'),
               ),
             ],
           ),
@@ -136,26 +140,24 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
       ),
     );
     final savedName = name.text.trim();
-    final savedShort = shortName.text.trim();
-    final savedIban = iban.text.trim();
-    disposeAfterDialog([name, shortName, iban]);
+    final savedDescription = description.text.trim();
+    disposeAfterDialog([name, description]);
     if (result != true || savedName.isEmpty) return;
     final repo = ref.read(repositoryProvider);
     if (payee == null) {
       await repo.insertPayee(
         savedName,
-        shortName: savedShort.isEmpty ? null : savedShort,
-        iban: savedIban.isEmpty ? null : savedIban,
+        description: savedDescription.isEmpty ? null : savedDescription,
       );
     } else {
       await repo.updatePayee(
         payee.id,
         name: savedName,
-        shortName: savedShort.isEmpty ? null : savedShort,
-        iban: savedIban.isEmpty ? null : savedIban,
+        description: savedDescription.isEmpty ? null : savedDescription,
       );
     }
     ref.invalidate(payeesProvider);
+    ref.invalidate(payeeTransactionCountsProvider);
   }
 
   Future<void> _delete(Payee payee) async {
@@ -182,6 +184,7 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
     if (confirmed != true) return;
     await ref.read(repositoryProvider).deletePayee(payee.id);
     ref.invalidate(payeesProvider);
+    ref.invalidate(payeeTransactionCountsProvider);
     ref.invalidate(transactionsProvider);
   }
 }

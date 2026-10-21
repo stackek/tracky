@@ -15,20 +15,14 @@ class SplitDraft {
     this.categoryId,
     this.amount = 0,
     this.comment = '',
-    this.debtMode = DebtMode.none,
-    this.debtPayeeId,
-    this.resolveDebtId,
-    this.debtAmount,
+    this.debtId,
   });
 
   int? id;
   int? categoryId;
   int amount;
   String comment;
-  DebtMode debtMode;
-  int? debtPayeeId;
-  int? resolveDebtId;
-  int? debtAmount;
+  int? debtId;
 }
 
 class TransactionDraft {
@@ -43,17 +37,12 @@ class TransactionDraft {
     DateTime? valueDate,
     this.categoryId,
     this.payeeId,
-    this.methodId,
     this.comment = '',
     this.number = '',
     this.crStatus = 'UNRECONCILED',
     List<SplitDraft>? parts,
     List<int>? tagIds,
-    this.debtMode = DebtMode.none,
-    this.debtPayeeId,
-    this.resolveDebtId,
-    this.debtAmount,
-    this.debtCurrency,
+    this.debtId,
   }) : date = date ?? DateTime.now(),
        valueDate = valueDate ?? date ?? DateTime.now(),
        parts = parts ?? [],
@@ -69,17 +58,12 @@ class TransactionDraft {
   DateTime valueDate;
   int? categoryId;
   int? payeeId;
-  int? methodId;
   String comment;
   String number;
   String crStatus;
   List<SplitDraft> parts;
   List<int> tagIds;
-  DebtMode debtMode;
-  int? debtPayeeId;
-  int? resolveDebtId;
-  int? debtAmount;
-  String? debtCurrency;
+  int? debtId;
 }
 
 extension TransactionRepository on Repository {
@@ -93,18 +77,16 @@ extension TransactionRepository on Repository {
       case TransactionVoidFilter.both:
         break;
       case TransactionVoidFilter.voidOnly:
-        conditions.add(
-          "(t.status = $statusVoid OR t.cr_status = 'VOID')",
-        );
+        conditions.add("(t.status = $statusVoid OR t.cr_status = 'VOID')");
       case TransactionVoidFilter.nonVoid:
-        conditions.add(
-          "t.status != $statusVoid AND t.cr_status != 'VOID'",
-        );
+        conditions.add("t.status != $statusVoid AND t.cr_status != 'VOID'");
     }
     if (!includeArchived) conditions.add('t.status != $statusArchived');
     if (filter.accountId != null) {
       conditions.add('t.account_id = ?');
       args.add(filter.accountId);
+    } else {
+      conditions.add('(t.transfer_peer IS NULL OR t.amount < 0)');
     }
     if (filter.payeeId != null) {
       conditions.add('t.payee_id = ?');
@@ -177,12 +159,12 @@ extension TransactionRepository on Repository {
       )
       SELECT t._id, t.comment, t.date, t.value_date, t.amount, t.cat_id,
              t.account_id, t.payee_id, t.transfer_peer, t.transfer_account,
-             t.method_id, t.parent_id, t.status, t.cr_status, t.number, t.uuid,
+             t.parent_id, t.status, t.cr_status, t.number, t.uuid,
              t.original_amount, t.original_currency, t.debt_id,
              c.label AS cat_label, cat_tree.path AS cat_path,
              cat_tree.icon AS cat_icon, cat_tree.color AS cat_color,
              c.type AS cat_type,
-             p.name AS payee_name, m.label AS method_label,
+             p.name AS payee_name,
              a.label AS account_label, a.currency AS currency,
              ta.label AS transfer_account_label,
              ta.currency AS transfer_account_currency,
@@ -196,7 +178,6 @@ extension TransactionRepository on Repository {
       LEFT JOIN categories c ON c._id = t.cat_id
       LEFT JOIN cat_tree ON cat_tree._id = t.cat_id
       LEFT JOIN payee p ON p._id = t.payee_id
-      LEFT JOIN paymentmethods m ON m._id = t.method_id
       LEFT JOIN accounts a ON a._id = t.account_id
       LEFT JOIN accounts ta ON ta._id = t.transfer_account
       WHERE ${conditions.join(' AND ')}
@@ -257,7 +238,7 @@ extension TransactionRepository on Repository {
     final rows = await db.rawQuery(
       '''
       SELECT t.*, c.label AS cat_label, c.type AS cat_type, c.icon AS cat_icon,
-             c.color AS cat_color, p.name AS payee_name, m.label AS method_label,
+             c.color AS cat_color, p.name AS payee_name,
              a.label AS account_label, a.currency AS currency,
              ta.label AS transfer_account_label,
              ta.currency AS transfer_account_currency,
@@ -271,7 +252,6 @@ extension TransactionRepository on Repository {
       FROM transactions t
       LEFT JOIN categories c ON c._id = t.cat_id
       LEFT JOIN payee p ON p._id = t.payee_id
-      LEFT JOIN paymentmethods m ON m._id = t.method_id
       LEFT JOIN accounts a ON a._id = t.account_id
       LEFT JOIN accounts ta ON ta._id = t.transfer_account
       WHERE t._id = ?
@@ -304,7 +284,6 @@ extension TransactionRepository on Repository {
     DateTime? valueDate,
     int? catId,
     int? payeeId,
-    int? methodId,
     int? parentId,
     int? transferPeer,
     int? transferAccount,
@@ -313,8 +292,6 @@ extension TransactionRepository on Repository {
     String crStatus = 'UNRECONCILED',
     String? uuid,
     int? debtId,
-    int? originalAmount,
-    String? originalCurrency,
   }) {
     return txn.insert('transactions', {
       'comment': comment,
@@ -326,15 +303,14 @@ extension TransactionRepository on Repository {
       'payee_id': payeeId,
       'transfer_peer': transferPeer,
       'transfer_account': transferAccount,
-      'method_id': methodId,
       'parent_id': parentId,
       'status': 0,
       'cr_status': crStatus,
       'number': number,
       'uuid': uuid ?? newUuid(),
       'debt_id': crStatus == 'VOID' ? null : debtId,
-      'original_amount': crStatus == 'VOID' ? null : originalAmount,
-      'original_currency': crStatus == 'VOID' ? null : originalCurrency,
+      'original_amount': null,
+      'original_currency': null,
     });
   }
 
@@ -344,21 +320,6 @@ extension TransactionRepository on Repository {
       if (draft.id != null) {
         existing = await _transactionWithTxn(txn, draft.id!);
       }
-      int? previousCreationDebtId;
-      if (existing != null) {
-        previousCreationDebtId = await _createdDebtId(txn, existing.id);
-        if (existing.isSplit) {
-          final oldChildren = await _childIds(txn, existing.id);
-          for (final childId in oldChildren) {
-            await _removeCreatedDebt(txn, childId);
-          }
-        }
-        if (draft.type == DraftType.transfer || draft.parts.isNotEmpty) {
-          await _removeCreatedDebt(txn, existing.id);
-          previousCreationDebtId = null;
-        }
-      }
-
       int resultId;
       if (existing == null) {
         resultId = await _insertDraft(txn, draft);
@@ -385,164 +346,10 @@ extension TransactionRepository on Repository {
         resultId = await _updateSimple(txn, existing, draft);
       }
 
-      if (draft.type != DraftType.transfer && draft.crStatus != 'VOID') {
-        if (draft.parts.isNotEmpty) {
-          final childIds = await _childIds(txn, resultId);
-          for (var i = 0; i < draft.parts.length && i < childIds.length; i++) {
-            final part = draft.parts[i];
-            await _applyCreatedDebt(
-              txn,
-              transactionId: childIds[i],
-              previousDebtId: null,
-              mode: part.debtMode,
-              payeeId: part.debtPayeeId ?? draft.payeeId,
-              convertedAmount: part.debtAmount,
-              transactionAmount: part.amount,
-              date: draft.date,
-              comment: part.comment.isNotEmpty ? part.comment : draft.comment,
-              currency: draft.debtCurrency,
-              accountId: draft.accountId!,
-            );
-          }
-        } else {
-          final amount = draft.type == DraftType.income
-              ? draft.amount.abs()
-              : -draft.amount.abs();
-          await _applyCreatedDebt(
-            txn,
-            transactionId: resultId,
-            previousDebtId: previousCreationDebtId,
-            mode: draft.debtMode,
-            payeeId: draft.debtPayeeId ?? draft.payeeId,
-            convertedAmount: draft.debtAmount,
-            transactionAmount: amount,
-            date: draft.date,
-            comment: draft.comment,
-            currency: draft.debtCurrency,
-            accountId: draft.accountId!,
-          );
-        }
-      }
       return resultId;
     });
     await setTags(id, draft.tagIds);
     return id;
-  }
-
-  Future<List<int>> _childIds(DatabaseExecutor txn, int parentId) async {
-    final rows = await txn.query(
-      'transactions',
-      columns: ['_id'],
-      where: 'parent_id = ?',
-      whereArgs: [parentId],
-      orderBy: '_id',
-    );
-    return rows.map((row) => asIntOr(row['_id'], 0)).toList();
-  }
-
-  Future<int?> _createdDebtId(
-    DatabaseExecutor txn,
-    int transactionId,
-  ) async {
-    final rows = await txn.query(
-      'app_debt_transactions',
-      columns: ['debt_id'],
-      where: "transaction_id = ? AND role = 'creation'",
-      whereArgs: [transactionId],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : asInt(rows.first['debt_id']);
-  }
-
-  Future<void> _removeCreatedDebt(
-    DatabaseExecutor txn,
-    int transactionId,
-  ) async {
-    final debtId = await _createdDebtId(txn, transactionId);
-    if (debtId == null) return;
-    await txn.delete(
-      'app_debt_transactions',
-      where: "transaction_id = ? AND role = 'creation'",
-      whereArgs: [transactionId],
-    );
-    await txn.delete('debts', where: '_id = ?', whereArgs: [debtId]);
-  }
-
-  Future<String> _accountCurrency(
-    DatabaseExecutor txn,
-    int accountId,
-  ) async {
-    final rows = await txn.query(
-      'accounts',
-      columns: ['currency'],
-      where: '_id = ?',
-      whereArgs: [accountId],
-      limit: 1,
-    );
-    return rows.isEmpty ? 'EUR' : asStringOr(rows.first['currency'], 'EUR');
-  }
-
-  Future<void> _applyCreatedDebt(
-    DatabaseExecutor txn, {
-    required int transactionId,
-    required int? previousDebtId,
-    required DebtMode mode,
-    required int? payeeId,
-    required int? convertedAmount,
-    required int transactionAmount,
-    required DateTime date,
-    required String comment,
-    required String? currency,
-    required int accountId,
-  }) async {
-    if (mode != DebtMode.create) {
-      if (previousDebtId != null) {
-        await _removeCreatedDebt(txn, transactionId);
-      }
-      return;
-    }
-    final debtCurrency =
-        currency ?? await _accountCurrency(txn, accountId);
-    final amount = -(convertedAmount ?? transactionAmount);
-    final label = comment.trim().isEmpty ? 'Debt' : comment.trim();
-    final values = {
-      'payee_id': payeeId,
-      'label': label,
-      'description': comment.trim(),
-      'date': toUnixTimestamp(date),
-      'amount': amount,
-      'equivalent_amount': amount,
-      'currency': debtCurrency,
-    };
-    if (previousDebtId != null) {
-      await txn.update(
-        'debts',
-        values,
-        where: '_id = ?',
-        whereArgs: [previousDebtId],
-      );
-      final link = await txn.query(
-        'app_debt_transactions',
-        columns: ['debt_id'],
-        where: "transaction_id = ? AND role = 'creation'",
-        whereArgs: [transactionId],
-        limit: 1,
-      );
-      if (link.isEmpty) {
-        await txn.insert('app_debt_transactions', {
-          'transaction_id': transactionId,
-          'debt_id': previousDebtId,
-          'role': 'creation',
-        });
-      }
-      return;
-    }
-    final debtId = await txn.insert('debts', values);
-    await txn.insert('app_debt_transactions', {
-      'transaction_id': transactionId,
-      'debt_id': debtId,
-      'role': 'creation',
-    });
   }
 
   Future<int> _insertDraft(DatabaseExecutor txn, TransactionDraft draft) async {
@@ -563,13 +370,10 @@ extension TransactionRepository on Repository {
       valueDate: draft.valueDate,
       catId: draft.categoryId,
       payeeId: draft.payeeId,
-      methodId: draft.methodId,
       comment: draft.comment,
       number: draft.number,
       crStatus: draft.crStatus,
-      debtId: draft.resolveDebtId,
-      originalAmount: draft.resolveDebtId == null ? null : draft.debtAmount,
-      originalCurrency: draft.resolveDebtId == null ? null : draft.debtCurrency,
+      debtId: draft.debtId,
     );
   }
 
@@ -583,7 +387,6 @@ extension TransactionRepository on Repository {
       valueDate: draft.valueDate,
       catId: splitCategoryId,
       payeeId: draft.payeeId,
-      methodId: draft.methodId,
       comment: draft.comment,
       number: draft.number,
       crStatus: draft.crStatus,
@@ -597,14 +400,11 @@ extension TransactionRepository on Repository {
         valueDate: draft.valueDate,
         catId: part.categoryId,
         payeeId: draft.payeeId,
-        methodId: draft.methodId,
         parentId: parentId,
         comment: part.comment,
         number: draft.number,
         crStatus: draft.crStatus,
-        debtId: part.resolveDebtId,
-        originalAmount: part.resolveDebtId == null ? null : part.debtAmount,
-        originalCurrency: part.resolveDebtId == null ? null : draft.debtCurrency,
+        debtId: part.debtId,
       );
     }
     return parentId;
@@ -629,7 +429,6 @@ extension TransactionRepository on Repository {
       valueDate: draft.valueDate,
       catId: transferCategoryId,
       transferAccount: target,
-      methodId: draft.methodId,
       comment: draft.comment,
       number: draft.number,
       crStatus: draft.crStatus,
@@ -644,7 +443,6 @@ extension TransactionRepository on Repository {
       catId: transferCategoryId,
       transferAccount: source,
       transferPeer: sourceId,
-      methodId: draft.methodId,
       comment: draft.comment,
       number: draft.number,
       crStatus: draft.crStatus,
@@ -668,20 +466,14 @@ extension TransactionRepository on Repository {
         'cat_id': draft.categoryId,
         'account_id': draft.accountId,
         'payee_id': draft.payeeId,
-        'method_id': draft.methodId,
         'comment': draft.comment,
         'number': draft.number,
         'date': toUnixTimestamp(draft.date),
         'value_date': toUnixTimestamp(draft.valueDate),
         'cr_status': draft.crStatus,
-        'debt_id': draft.crStatus == 'VOID' ? null : draft.resolveDebtId,
-        'original_amount': draft.crStatus == 'VOID' || draft.resolveDebtId == null
-            ? null
-            : draft.debtAmount,
-        'original_currency':
-            draft.crStatus == 'VOID' || draft.resolveDebtId == null
-            ? null
-            : draft.debtCurrency,
+        'debt_id': draft.crStatus == 'VOID' ? null : draft.debtId,
+        'original_amount': null,
+        'original_currency': null,
       },
       where: '_id = ?',
       whereArgs: [existing.id],
@@ -702,7 +494,6 @@ extension TransactionRepository on Repository {
         'cat_id': splitCategoryId,
         'account_id': draft.accountId,
         'payee_id': draft.payeeId,
-        'method_id': draft.methodId,
         'comment': draft.comment,
         'number': draft.number,
         'date': toUnixTimestamp(draft.date),
@@ -729,14 +520,11 @@ extension TransactionRepository on Repository {
         valueDate: draft.valueDate,
         catId: part.categoryId,
         payeeId: draft.payeeId,
-        methodId: draft.methodId,
         parentId: existing.id,
         comment: part.comment,
         number: draft.number,
         crStatus: draft.crStatus,
-        debtId: part.resolveDebtId,
-        originalAmount: part.resolveDebtId == null ? null : part.debtAmount,
-        originalCurrency: part.resolveDebtId == null ? null : draft.debtCurrency,
+        debtId: part.debtId,
       );
     }
     return existing.id;
@@ -766,7 +554,6 @@ extension TransactionRepository on Repository {
         'cat_id': transferCategoryId,
         'account_id': source,
         'transfer_account': target,
-        'method_id': draft.methodId,
         'comment': draft.comment,
         'number': draft.number,
         'date': toUnixTimestamp(draft.date),
@@ -783,7 +570,6 @@ extension TransactionRepository on Repository {
         'cat_id': transferCategoryId,
         'account_id': target,
         'transfer_account': source,
-        'method_id': draft.methodId,
         'comment': draft.comment,
         'number': draft.number,
         'date': toUnixTimestamp(draft.date),
@@ -949,33 +735,16 @@ extension TransactionRepository on Repository {
     });
   }
 
-  Future<List<DebtTransactionEntry>> debtTransactions(
-    int debtId, {
-    DebtTransactionFilter filter = DebtTransactionFilter.all,
-  }) async {
-    final roleCondition = switch (filter) {
-      DebtTransactionFilter.all => '',
-      DebtTransactionFilter.increasing => 'AND dt.resolving = 0',
-      DebtTransactionFilter.resolving => 'AND dt.resolving = 1',
-    };
-    final rows = await db.rawQuery('''
-      WITH debt_tx AS (
-        SELECT transaction_id AS id, 0 AS resolving
-        FROM app_debt_transactions
-        WHERE debt_id = ? AND role = 'creation'
-        UNION
-        SELECT _id AS id, 1 AS resolving
-        FROM transactions
-        WHERE debt_id = ?
-      )
+  Future<List<Transaction>> debtTransactions(int debtId) async {
+    final rows = await db.rawQuery(
+      '''
       SELECT t._id, t.comment, t.date, t.value_date, t.amount, t.cat_id,
              t.account_id, t.payee_id, t.transfer_peer, t.transfer_account,
-             t.method_id, t.parent_id, t.status, t.cr_status, t.number, t.uuid,
+             t.parent_id, t.status, t.cr_status, t.number, t.uuid,
              t.original_amount, t.original_currency, t.debt_id,
-             dt.resolving AS debt_resolving,
              c.label AS cat_label, c.label AS cat_path,
              c.icon AS cat_icon, c.color AS cat_color, c.type AS cat_type,
-             p.name AS payee_name, m.label AS method_label,
+             p.name AS payee_name,
              a.label AS account_label, a.currency AS currency,
              ta.label AS transfer_account_label,
              ta.currency AS transfer_account_currency,
@@ -985,26 +754,20 @@ extension TransactionRepository on Repository {
                 WHERE x.transaction_id = t._id) AS attachment_count,
              (SELECT count(*) FROM transactions ch
                 WHERE ch.parent_id = t._id) AS split_count
-      FROM debt_tx dt
-      JOIN transactions t ON t._id = dt.id
+      FROM transactions t
       LEFT JOIN categories c ON c._id = t.cat_id
       LEFT JOIN payee p ON p._id = t.payee_id
-      LEFT JOIN paymentmethods m ON m._id = t.method_id
       LEFT JOIN accounts a ON a._id = t.account_id
       LEFT JOIN accounts ta ON ta._id = t.transfer_account
-      WHERE t.status != $statusVoid
+      WHERE t.debt_id = ?
+        AND t.status != $statusVoid
         AND t.status != $statusArchived
         AND t.cr_status != 'VOID'
-        $roleCondition
       ORDER BY t.date DESC, t._id DESC
-    ''', [debtId, debtId]);
-    return [
-      for (final row in rows)
-        DebtTransactionEntry(
-          transaction: Transaction.fromMap(row),
-          resolving: asBool(row['debt_resolving']),
-        ),
-    ];
+    ''',
+      [debtId],
+    );
+    return rows.map(Transaction.fromMap).toList();
   }
 
   Future<void> removeDebt(
@@ -1013,23 +776,13 @@ extension TransactionRepository on Repository {
     int? targetDebtId,
   }) async {
     await db.transaction((txn) async {
-      final creationRows = await txn.query(
-        'app_debt_transactions',
-        columns: ['transaction_id'],
-        where: "debt_id = ? AND role = 'creation'",
-        whereArgs: [debtId],
-      );
-      final resolvingRows = await txn.query(
+      final rows = await txn.query(
         'transactions',
         columns: ['_id'],
         where: 'debt_id = ?',
         whereArgs: [debtId],
       );
-      final ids = <int>{
-        for (final row in creationRows)
-          asIntOr(row['transaction_id'], 0),
-        for (final row in resolvingRows) asIntOr(row['_id'], 0),
-      }..remove(0);
+      final ids = rows.map((row) => asIntOr(row['_id'], 0)).toSet()..remove(0);
       final placeholders = List.filled(ids.length, '?').join(',');
 
       switch (action) {
@@ -1050,9 +803,7 @@ extension TransactionRepository on Repository {
             }
           }
         case DebtRemovalAction.reassign:
-          if (targetDebtId == null || targetDebtId == debtId) {
-            return;
-          }
+          if (targetDebtId == null || targetDebtId == debtId) return;
           if (ids.isNotEmpty) {
             await txn.rawUpdate(
               'UPDATE transactions SET debt_id = ? '
@@ -1060,11 +811,6 @@ extension TransactionRepository on Repository {
               [targetDebtId, ...ids],
             );
           }
-          await txn.delete(
-            'app_debt_transactions',
-            where: 'debt_id = ?',
-            whereArgs: [debtId],
-          );
         case DebtRemovalAction.detach:
           if (ids.isNotEmpty) {
             await txn.rawUpdate(
@@ -1073,11 +819,6 @@ extension TransactionRepository on Repository {
               ids.toList(),
             );
           }
-          await txn.delete(
-            'app_debt_transactions',
-            where: 'debt_id = ?',
-            whereArgs: [debtId],
-          );
       }
       await txn.delete('debts', where: '_id = ?', whereArgs: [debtId]);
     });
@@ -1141,11 +882,7 @@ extension TransactionRepository on Repository {
         where: 'parent_id = ? AND _id != ?',
         whereArgs: [category.id, category.id],
       );
-      await txn.delete(
-        'categories',
-        where: '_id = ?',
-        whereArgs: [categoryId],
-      );
+      await txn.delete('categories', where: '_id = ?', whereArgs: [categoryId]);
     });
   }
 
@@ -1168,9 +905,6 @@ extension TransactionRepository on Repository {
       whereArgs: [id],
     );
     ids.addAll(childRows.map((row) => asIntOr(row['_id'], 0)));
-    for (final transactionId in ids) {
-      await _removeCreatedDebt(txn, transactionId);
-    }
     final placeholders = List.filled(ids.length, '?').join(',');
     final attachmentRows = await txn.rawQuery('''
       SELECT a._id, a.uri FROM attachments a
@@ -1191,13 +925,11 @@ extension TransactionRepository on Repository {
         whereArgs: [asInt(attachment['_id'])],
       );
     }
-    for (final transactionId in ids) {
-      await txn.delete(
-        'transactions',
-        where: '_id = ?',
-        whereArgs: [transactionId],
-      );
-    }
+    await txn.delete(
+      'transactions',
+      where: '_id IN ($placeholders)',
+      whereArgs: ids,
+    );
   }
 
   // ------------------------------------------------------------ attachments
@@ -1279,9 +1011,7 @@ extension TransactionRepository on Repository {
 
   Future<List<int>> _statsAccountIds(int? accountId) async {
     if (accountId != null) return [accountId];
-    final rows = await db.rawQuery(
-      'SELECT _id FROM accounts WHERE exclude_from_totals = 0',
-    );
+    final rows = await db.rawQuery('SELECT _id FROM accounts');
     return rows.map((row) => asIntOr(row['_id'], 0)).toList();
   }
 
@@ -1302,6 +1032,8 @@ extension TransactionRepository on Repository {
         monthly: const [],
         byCategoryExpense: const [],
         byCategoryIncome: const [],
+        directExpenseAmounts: const {},
+        directIncomeAmounts: const {},
         currency: displayCurrency,
       );
     }
@@ -1342,15 +1074,25 @@ extension TransactionRepository on Repository {
     Future<List<CategoryTotal>> categoryBreakdown(bool income) async {
       final categoryAmount = income ? 't.amount' : '-t.amount';
       final categoryRows = await db.rawQuery('''
-        SELECT COALESCE(c.parent_id, c._id, 0) AS group_id,
-               COALESCE(pc.label, c.label, 'Uncategorized') AS label,
-               COALESCE(pc.icon, c.icon) AS icon,
-               COALESCE(pc.color, c.color) AS color,
+        WITH RECURSIVE category_roots(_id, root_id) AS (
+          SELECT _id, _id FROM categories
+          WHERE parent_id IS NULL OR parent_id = _id
+          UNION ALL
+          SELECT c._id, category_roots.root_id
+          FROM categories c
+          JOIN category_roots ON c.parent_id = category_roots._id
+          WHERE c._id != category_roots._id
+        )
+        SELECT COALESCE(r.root_id, 0) AS group_id,
+               COALESCE(root.label, c.label, 'Uncategorized') AS label,
+               COALESCE(root.icon, c.icon) AS icon,
+               COALESCE(root.color, c.color) AS color,
                SUM(CAST(ROUND($categoryAmount * $rateExpression) AS INTEGER)) AS amount
         FROM transactions t
         JOIN accounts a ON a._id = t.account_id
         LEFT JOIN categories c ON c._id = t.cat_id
-        LEFT JOIN categories pc ON pc._id = c.parent_id
+        LEFT JOIN category_roots r ON r._id = c._id
+        LEFT JOIN categories root ON root._id = r.root_id
         WHERE t.account_id IN ($placeholders)
           AND t.date >= ? AND t.date < ?
           AND t.status != $statusVoid AND t.status != $statusArchived
@@ -1374,8 +1116,33 @@ extension TransactionRepository on Repository {
           .toList();
     }
 
+    Future<Map<int, int>> directBreakdown(bool income) async {
+      final categoryAmount = income ? 't.amount' : '-t.amount';
+      final rows = await db.rawQuery('''
+        SELECT COALESCE(c._id, 0) AS cat_id,
+               SUM(CAST(ROUND($categoryAmount * $rateExpression) AS INTEGER)) AS amount
+        FROM transactions t
+        JOIN accounts a ON a._id = t.account_id
+        LEFT JOIN categories c ON c._id = t.cat_id
+        WHERE t.account_id IN ($placeholders)
+          AND t.date >= ? AND t.date < ?
+          AND t.status != $statusVoid AND t.status != $statusArchived
+          AND t.cr_status != 'VOID'
+          AND t.amount ${income ? '>' : '<'} 0
+          AND (t.cat_id IS NULL OR t.cat_id NOT IN ($splitCategoryId, $transferCategoryId))
+        GROUP BY c._id
+        HAVING SUM($categoryAmount * $rateExpression) > 0
+      ''', rangeArgs);
+      return {
+        for (final row in rows)
+          asIntOr(row['cat_id'], 0): asIntOr(row['amount'], 0),
+      };
+    }
+
     final expenseByCategory = await categoryBreakdown(false);
     final incomeByCategory = await categoryBreakdown(true);
+    final expenseDirect = await directBreakdown(false);
+    final incomeDirect = await directBreakdown(true);
 
     return StatsData(
       income: asIntOr(current['income'], 0),
@@ -1383,6 +1150,8 @@ extension TransactionRepository on Repository {
       monthly: const [],
       byCategoryExpense: expenseByCategory,
       byCategoryIncome: incomeByCategory,
+      directExpenseAmounts: expenseDirect,
+      directIncomeAmounts: incomeDirect,
       currency: displayCurrency,
     );
   }
@@ -1646,7 +1415,6 @@ extension TransactionRepository on Repository {
     required int? categoryId,
     required int accountId,
     int? payeeId,
-    int? methodId,
     int? transferAccount,
   }) async {
     return db.insert('templates', {
@@ -1656,14 +1424,10 @@ extension TransactionRepository on Repository {
       'cat_id': categoryId,
       'account_id': accountId,
       'payee_id': payeeId,
-      'method_id': methodId,
       'transfer_account': transferAccount,
       'usages': 0,
-      'plan_execution': 0,
       'uuid': newUuid(),
       'status': 0,
-      'plan_execution_advance': 0,
-      'default_action': 'SAVE',
     });
   }
 
@@ -1675,7 +1439,6 @@ extension TransactionRepository on Repository {
     required int? categoryId,
     required int accountId,
     int? payeeId,
-    int? methodId,
     int? transferAccount,
   }) async {
     await db.update(
@@ -1687,7 +1450,6 @@ extension TransactionRepository on Repository {
         'cat_id': categoryId,
         'account_id': accountId,
         'payee_id': payeeId,
-        'method_id': methodId,
         'transfer_account': transferAccount,
       },
       where: '_id = ?',
@@ -1710,7 +1472,6 @@ extension TransactionRepository on Repository {
       targetAmount: template.amount.abs(),
       categoryId: template.catId,
       payeeId: template.payeeId,
-      methodId: template.methodId,
       comment: template.comment.isEmpty ? template.title : template.comment,
     );
     final id = await saveTransaction(draft);

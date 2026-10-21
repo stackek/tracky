@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/prefs.dart';
+import '../core/storage_access.dart';
 import 'backup_service.dart';
 
 enum AutoBackupUnit { hours, days, weeks, months }
@@ -57,10 +59,20 @@ class AutoBackupService {
   final AppPreferences preferences;
   final BackupService backupService;
 
-  Future<File?> runIfDue() async {
-    if (!preferences.autoBackupEnabled) return null;
+  String? get _folderUri => preferences.autoBackupFolderUri;
+
+  bool get hasFolder {
+    if (StorageAccess.isSupported) {
+      final uri = _folderUri;
+      return uri != null && uri.isNotEmpty;
+    }
     final folder = preferences.autoBackupFolder;
-    if (folder == null || folder.isEmpty) return null;
+    return folder != null && folder.isNotEmpty;
+  }
+
+  Future<String?> runIfDue() async {
+    if (!preferences.autoBackupEnabled) return null;
+    if (!hasFolder) return null;
     final unit = AutoBackupUnitInfo.parse(preferences.autoBackupUnit);
     final interval = preferences.autoBackupInterval.clamp(1, 9999);
     final last = preferences.lastAutoBackupAt;
@@ -71,29 +83,62 @@ class AutoBackupService {
     return runNow();
   }
 
-  Future<File> runNow() async {
+  Future<String> runNow() async {
     final folder = preferences.autoBackupFolder;
-    if (folder == null || folder.isEmpty) {
+    final folderUri = _folderUri;
+    final useStorageAccess = StorageAccess.isSupported;
+    if (useStorageAccess) {
+      if (folderUri == null || folderUri.isEmpty) {
+        throw BackupException(
+          'Choose a backup folder first. Android requires you to pick the '
+          'folder again after this update.',
+        );
+      }
+    } else if (folder == null || folder.isEmpty) {
       throw BackupException('Choose a backup folder first.');
-    }
-    final directory = Directory(folder);
-    if (!await directory.exists()) {
-      await directory.create(recursive: true);
     }
     String? password;
     if (preferences.autoBackupEncrypted) {
       password = preferences.autoBackupPassword;
       if (password == null || password.isEmpty) {
-        throw BackupException('Set a password for encrypted automatic backups.');
+        throw BackupException(
+          'Set a password for encrypted automatic backups.',
+        );
       }
     }
     final file = await backupService.export(password: password);
-    final target = File(p.join(directory.path, p.basename(file.path)));
-    await file.copy(target.path);
-    await preferences.recordAutoBackup(p.basename(target.path));
+    final name = p.basename(file.path);
     try {
-      await file.delete();
-    } catch (_) {}
-    return target;
+      if (useStorageAccess) {
+        try {
+          await StorageAccess.writeFile(
+            uri: folderUri!,
+            fileName: name,
+            mimeType: name.endsWith('.enc')
+                ? 'application/octet-stream'
+                : 'application/zip',
+            bytes: await file.readAsBytes(),
+          );
+        } on PlatformException catch (error) {
+          throw BackupException(
+            error.message ??
+                'Could not write the backup to the selected folder.',
+          );
+        }
+      } else {
+        final directory = Directory(folder!);
+        if (!await directory.exists()) {
+          await directory.create(recursive: true);
+        }
+        final target = File(p.join(directory.path, name));
+        await file.copy(target.path);
+      }
+    } finally {
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
+    await preferences.recordAutoBackup(name);
+    return name;
   }
 }

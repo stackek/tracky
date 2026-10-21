@@ -1,0 +1,1 @@
+Removed unused My Expenses fields, simplified debts, fixed transfers, added foldable days, recursive statistics colours and tag remapping.

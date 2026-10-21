@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../core/icons.dart';
@@ -41,56 +42,16 @@ Future<int?> showCategoryPicker(
     list.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
   }
 
-  bool containsId(Category category, int? id) {
-    if (id == null) return false;
-    if (category.id == id) return true;
-    return (children[category.id] ?? const []).any(
-      (child) => containsId(child, id),
-    );
-  }
-
-  Widget tile(Category category) {
-    final selected = category.id == initialId;
-    final leading = Icon(
-      iconForCategory(category.icon),
-      color: colorFromDb(category.color),
-    );
-    final title = Text(category.label);
-    final trailing = selected ? const Icon(Icons.check) : null;
-    final childCategories = children[category.id] ?? const <Category>[];
-    if (childCategories.isEmpty) {
-      return ListTile(
-        selected: selected,
-        leading: leading,
-        title: title,
-        trailing: trailing,
-        onTap: () => Navigator.of(context).pop(category.id),
-      );
-    }
-    return ExpansionTile(
-      initiallyExpanded: containsId(category, initialId),
-      leading: leading,
-      title: title,
-      trailing: trailing,
-      shape: const Border(),
-      collapsedShape: const Border(),
-      childrenPadding: const EdgeInsets.only(left: 16),
-      children: [
-        ListTile(
-          contentPadding: const EdgeInsets.only(left: 24, right: 16),
-          leading: Icon(
-            iconForCategory(category.icon),
-            size: 20,
-            color: colorFromDb(category.color),
-          ),
-          title: Text(category.label),
-          trailing: selected ? const Icon(Icons.check) : null,
-          selected: selected,
-          onTap: () => Navigator.of(context).pop(category.id),
-        ),
-        for (final child in childCategories) tile(child),
-      ],
-    );
+  final expanded = <int>{};
+  var current = initialId;
+  var guard = 0;
+  while (current != null && guard++ < 50) {
+    final category = categories.where((item) => item.id == current).firstOrNull;
+    if (category == null) break;
+    final parent = category.parentId;
+    if (parent == null || parent == 0 || parent == category.id) break;
+    expanded.add(parent);
+    current = parent;
   }
 
   return showModalBottomSheet<int>(
@@ -99,6 +60,53 @@ Future<int?> showCategoryPicker(
     showDragHandle: true,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) {
+        Widget tile(Category category, int depth) {
+          final selected = category.id == initialId;
+          final childCategories = children[category.id] ?? const <Category>[];
+          final isExpanded = expanded.contains(category.id);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListTile(
+                selected: selected,
+                contentPadding: EdgeInsets.only(
+                  left: 16.0 + depth * 20,
+                  right: 8,
+                ),
+                leading: Icon(
+                  iconForCategory(category.icon),
+                  color: colorFromDb(category.color),
+                ),
+                title: Text(category.label),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (selected) const Icon(Icons.check),
+                    if (childCategories.isNotEmpty)
+                      IconButton(
+                        tooltip: isExpanded ? 'Collapse' : 'Expand',
+                        icon: AnimatedRotation(
+                          turns: isExpanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          child: const Icon(Icons.expand_more),
+                        ),
+                        onPressed: () => setState(() {
+                          if (!expanded.remove(category.id)) {
+                            expanded.add(category.id);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
+                onTap: () => Navigator.of(context).pop(category.id),
+              ),
+              if (isExpanded)
+                for (final child in childCategories) tile(child, depth + 1),
+            ],
+          );
+        }
+
         final searching = query.trim().isNotEmpty;
         final filtered = categories
             .where(
@@ -154,7 +162,7 @@ Future<int?> showCategoryPicker(
                       )
                     : ListView(
                         controller: controller,
-                        children: [for (final root in roots) tile(root)],
+                        children: [for (final root in roots) tile(root, 0)],
                       ),
               ),
             ],

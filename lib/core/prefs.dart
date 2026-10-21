@@ -21,6 +21,7 @@ class AppPreferences {
   static const _autoBackupEncrypted = 'auto_backup_encrypted';
   static const _autoBackupPassword = 'auto_backup_password';
   static const _autoBackupFolder = 'auto_backup_folder';
+  static const _autoBackupFolderUri = 'auto_backup_folder_uri';
   static const _lastAutoBackupAt = 'last_auto_backup_at';
   static const _lastAutoBackupName = 'last_auto_backup_name';
   static const _currencyDecimals = 'currency_decimals';
@@ -143,11 +144,9 @@ class AppPreferences {
     }
   }
 
-  set autoBackupUnit(String value) =>
-      _prefs.setString(_autoBackupUnit, value);
+  set autoBackupUnit(String value) => _prefs.setString(_autoBackupUnit, value);
 
-  bool get autoBackupEncrypted =>
-      _prefs.getBool(_autoBackupEncrypted) ?? false;
+  bool get autoBackupEncrypted => _prefs.getBool(_autoBackupEncrypted) ?? false;
   set autoBackupEncrypted(bool value) =>
       _prefs.setBool(_autoBackupEncrypted, value);
 
@@ -166,6 +165,15 @@ class AppPreferences {
       _prefs.remove(_autoBackupFolder);
     } else {
       _prefs.setString(_autoBackupFolder, value);
+    }
+  }
+
+  String? get autoBackupFolderUri => _prefs.getString(_autoBackupFolderUri);
+  set autoBackupFolderUri(String? value) {
+    if (value == null) {
+      _prefs.remove(_autoBackupFolderUri);
+    } else {
+      _prefs.setString(_autoBackupFolderUri, value);
     }
   }
 

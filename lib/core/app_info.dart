@@ -1,9 +1,10 @@
 const appName = 'Tracky';
-const appVersion = '1.0.1';
-const appBuildNumber = 2;
+const appVersion = '1.1.0';
+const appBuildNumber = 3;
 const appVersionLabel = 'Version $appVersion';
 const repositoryUrl = 'https://github.com/stackek/tracky';
 const releasesUrl = '$repositoryUrl/releases';
+const licenceUrl = '$repositoryUrl/blob/main/LICENSE';
 
 class ChangelogEntry {
   const ChangelogEntry({
@@ -20,6 +21,19 @@ class ChangelogEntry {
 const changelogEntries = <ChangelogEntry>[
   ChangelogEntry(
     version: appVersion,
+    date: '21 October 2026',
+    changes: [
+      'Automatic backups now use the Android folder picker.',
+      'Removed unused My Expenses fields and simplified accounts and payees.',
+      'Foldable transaction days, parent category selection and tag remapping.',
+      'Recursive statistics breakdown with distinct subcategory colours.',
+      'Simplified debts: assigned transactions directly change the balance.',
+      'Fixed transfer display and deletion.',
+      'Added transaction counts for tags, payees and account types.',
+    ],
+  ),
+  ChangelogEntry(
+    version: '1.0.1',
     date: '21 October 2026',
     changes: [
       'First F-Droid release of Tracky.',

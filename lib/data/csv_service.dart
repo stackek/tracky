@@ -38,7 +38,6 @@ class CsvService {
         'Currency',
         'Category',
         'Payee',
-        'Payment method',
         'Account',
         'Comment',
         'Tags',
@@ -54,7 +53,6 @@ class CsvService {
         transaction.currency,
         transaction.categoryPath ?? '',
         transaction.payeeName ?? '',
-        transaction.methodLabel ?? '',
         transaction.accountLabel ?? '',
         transaction.comment,
         transaction.tagIds.join(' '),
@@ -94,7 +92,6 @@ class CsvService {
     final currencyIndex = indexOf(['currency', 'währung', 'валюта']);
     final categoryIndex = indexOf(['category', 'kategorie', 'категорія']);
     final payeeIndex = indexOf(['payee', 'payee name', 'empfänger']);
-    final methodIndex = indexOf(['payment method', 'method', 'zahlungsart']);
     final accountIndex = indexOf(['account', 'konto', 'рахунок']);
     final commentIndex = indexOf(['comment', 'note', 'notiz', 'коментар']);
     final tagsIndex = indexOf(['tags', 'tag', 'теги']);
@@ -108,7 +105,6 @@ class CsvService {
     final accounts = await repository.accounts();
     final categories = await repository.categories();
     final payees = await repository.payees();
-    final methods = await repository.paymentMethods();
     final tags = await repository.tags();
 
     var imported = 0;
@@ -129,9 +125,13 @@ class CsvService {
           skipped++;
           continue;
         }
-        final account = accounts
-                .where((item) =>
-                    item.label.toLowerCase() == cell(accountIndex).toLowerCase())
+        final account =
+            accounts
+                .where(
+                  (item) =>
+                      item.label.toLowerCase() ==
+                      cell(accountIndex).toLowerCase(),
+                )
                 .firstOrNull ??
             accounts.where((item) => item.id == defaultAccountId).firstOrNull ??
             accounts.firstOrNull;
@@ -139,9 +139,11 @@ class CsvService {
           skipped++;
           continue;
         }
-        final currency =
-            cell(currencyIndex).isEmpty ? account.currency : cell(currencyIndex);
-        final normalizedAmount = parseAmountToMinor(amountText, currency) ?? amount;
+        final currency = cell(currencyIndex).isEmpty
+            ? account.currency
+            : cell(currencyIndex);
+        final normalizedAmount =
+            parseAmountToMinor(amountText, currency) ?? amount;
         final isIncome = normalizedAmount > 0;
 
         Category? category;
@@ -149,9 +151,11 @@ class CsvService {
         if (categoryText.isNotEmpty) {
           final leaf = categoryText.split('>').last.trim().toLowerCase();
           category = categories
-              .where((item) =>
-                  item.label.toLowerCase() == leaf &&
-                  item.type == (isIncome ? 2 : 1))
+              .where(
+                (item) =>
+                    item.label.toLowerCase() == leaf &&
+                    item.type == (isIncome ? 2 : 1),
+              )
               .firstOrNull;
           if (category == null) {
             final id = await repository.insertCategory(
@@ -178,22 +182,15 @@ class CsvService {
         final payeeText = cell(payeeIndex);
         if (payeeText.isNotEmpty) {
           payee = payees
-              .where((item) => item.name.toLowerCase() == payeeText.toLowerCase())
+              .where(
+                (item) => item.name.toLowerCase() == payeeText.toLowerCase(),
+              )
               .firstOrNull;
           if (payee == null) {
             final id = await repository.insertPayee(payeeText);
             payee = Payee(id: id, name: payeeText);
             payees.add(payee);
           }
-        }
-
-        PaymentMethod? method;
-        final methodText = cell(methodIndex);
-        if (methodText.isNotEmpty) {
-          method = methods
-              .where((item) =>
-                  item.displayName.toLowerCase() == methodText.toLowerCase())
-              .firstOrNull;
         }
 
         final tagIds = <int>[];
@@ -220,7 +217,6 @@ class CsvService {
             valueDate: date,
             categoryId: category?.id,
             payeeId: payee?.id,
-            methodId: method?.id,
             comment: cell(commentIndex),
             crStatus: _status(cell(statusIndex)),
             tagIds: tagIds,

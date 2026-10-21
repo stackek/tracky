@@ -13,6 +13,8 @@ class TagsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tags = ref.watch(tagsProvider);
+    final counts =
+        ref.watch(tagTransactionCountsProvider).value ?? const <int, int>{};
     return Scaffold(
       appBar: AppBar(title: const Text('Tags')),
       floatingActionButton: FloatingActionButton(
@@ -31,65 +33,18 @@ class TagsScreen extends ConsumerWidget {
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final tag = items[index];
+                  final count = counts[tag.id] ?? 0;
                   return ListTile(
                     leading: const Icon(Icons.sell_outlined),
                     title: Text(tag.label),
+                    subtitle: Text(
+                      count == 1 ? '1 transaction' : '$count transactions',
+                    ),
                     onTap: () => _edit(context, ref, tag),
                     trailing: IconButton(
-                      tooltip: 'More',
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () async {
-                        final action = await showActionSheet<String>(
-                          context,
-                          title: tag.label,
-                          actions: const [
-                            SheetAction(
-                              value: 'edit',
-                              label: 'Edit',
-                              icon: Icons.edit_outlined,
-                            ),
-                            SheetAction(
-                              value: 'delete',
-                              label: 'Delete',
-                              icon: Icons.delete_outline,
-                              destructive: true,
-                            ),
-                          ],
-                        );
-                        if (!context.mounted) return;
-                        if (action == 'edit') {
-                          await _edit(context, ref, tag);
-                        } else if (action == 'delete') {
-                          final confirmed = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: Text('Delete ${tag.label}?'),
-                              content: const Text(
-                                'The tag will be removed from all transactions.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(false),
-                                  child: const Text('Cancel'),
-                                ),
-                                FilledButton(
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(true),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirmed == true) {
-                            await ref
-                                .read(repositoryProvider)
-                                .deleteTag(tag.id);
-                            ref.invalidate(tagsProvider);
-                            ref.invalidate(transactionsProvider);
-                          }
-                        }
-                      },
+                      tooltip: 'Delete tag',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _delete(context, ref, tag, items),
                     ),
                   );
                 },
@@ -99,6 +54,79 @@ class TagsScreen extends ConsumerWidget {
             Center(child: Text('Could not load tags:\n$error')),
       ),
     );
+  }
+
+  Future<void> _delete(
+    BuildContext context,
+    WidgetRef ref,
+    Tag tag,
+    List<Tag> allTags,
+  ) async {
+    final repo = ref.read(repositoryProvider);
+    final count = await repo.tagTransactionCount(tag.id);
+    if (!context.mounted) return;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${tag.label}?'),
+        content: Text(
+          count == 0
+              ? 'This cannot be undone.'
+              : '$count transactions use this tag. You can move them to '
+                    'another tag or remove the tag from them.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          if (count > 0)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('remap'),
+              child: const Text('Remap'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('delete'),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (action == null || !context.mounted) return;
+
+    int? targetTagId;
+    if (action == 'remap') {
+      final candidates = allTags.where((item) => item.id != tag.id).toList();
+      if (candidates.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Create another tag to remap transactions to.'),
+            ),
+          );
+        }
+        return;
+      }
+      targetTagId = await showSearchPicker<int>(
+        context: context,
+        title: 'Move transactions to',
+        hint: 'Search tags',
+        entries: [
+          for (final candidate in candidates)
+            PickerEntry(
+              value: candidate.id,
+              label: candidate.label,
+              icon: Icons.sell_outlined,
+            ),
+        ],
+      );
+      if (targetTagId == null) return;
+    }
+
+    await repo.deleteTag(tag.id, targetTagId: targetTagId);
+    ref.invalidate(tagsProvider);
+    ref.invalidate(tagTransactionCountsProvider);
+    ref.invalidate(transactionsProvider);
   }
 
   Future<void> _edit(BuildContext context, WidgetRef ref, [Tag? tag]) async {
@@ -135,5 +163,6 @@ class TagsScreen extends ConsumerWidget {
       await ref.read(repositoryProvider).updateTag(tag.id, label: label);
     }
     ref.invalidate(tagsProvider);
+    ref.invalidate(tagTransactionCountsProvider);
   }
 }

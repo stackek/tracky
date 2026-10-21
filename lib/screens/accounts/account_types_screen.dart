@@ -6,7 +6,6 @@ import 'package:my_expenses_open/core/ui_utils.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
-import '../../widgets/search_picker.dart';
 
 class AccountTypesScreen extends ConsumerWidget {
   const AccountTypesScreen({super.key});
@@ -14,6 +13,9 @@ class AccountTypesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final types = ref.watch(accountTypesProvider);
+    final counts =
+        ref.watch(accountTypeTransactionCountsProvider).value ??
+        const <int, int>{};
     return Scaffold(
       appBar: AppBar(title: const Text('Account types')),
       floatingActionButton: FloatingActionButton(
@@ -32,51 +34,23 @@ class AccountTypesScreen extends ConsumerWidget {
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final type = items[index];
+                  final count = counts[type.id] ?? 0;
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Theme.of(context)
                           .colorScheme
                           .surfaceContainerHigh,
-                      child: Icon(
-                        type.isAsset ? Icons.trending_up : Icons.trending_down,
-                      ),
+                      child: const Icon(Icons.account_balance_wallet_outlined),
                     ),
                     title: Text(type.displayName),
                     subtitle: Text(
-                      [
-                        type.isAsset ? 'Asset' : 'Liability',
-                        if (type.supportsReconciliation) 'Reconciliation',
-                      ].join(' • '),
+                      count == 1 ? '1 transaction' : '$count transactions',
                     ),
                     onTap: () => _editType(context, ref, type),
                     trailing: IconButton(
-                      tooltip: 'More',
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () async {
-                        final action = await showActionSheet<String>(
-                          context,
-                          title: type.displayName,
-                          actions: const [
-                            SheetAction(
-                              value: 'edit',
-                              label: 'Edit',
-                              icon: Icons.edit_outlined,
-                            ),
-                            SheetAction(
-                              value: 'delete',
-                              label: 'Delete',
-                              icon: Icons.delete_outline,
-                              destructive: true,
-                            ),
-                          ],
-                        );
-                        if (!context.mounted) return;
-                        if (action == 'edit') {
-                          await _editType(context, ref, type);
-                        } else if (action == 'delete') {
-                          await _deleteType(context, ref, type);
-                        }
-                      },
+                      tooltip: 'Delete',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _deleteType(context, ref, type),
                     ),
                   );
                 },
@@ -97,63 +71,43 @@ class AccountTypesScreen extends ConsumerWidget {
     final sortKey = TextEditingController(
       text: (type?.sortKey ?? 0).toString(),
     );
-    var isAsset = type?.isAsset ?? true;
-    var supportsReconciliation = type?.supportsReconciliation ?? true;
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(type == null ? 'New account type' : 'Edit account type'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: name,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Name'),
+      builder: (context) => AlertDialog(
+        title: Text(type == null ? 'New account type' : 'Edit account type'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: sortKey,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Sort order',
+                  helperText: 'Lower numbers appear first',
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: sortKey,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Sort order',
-                    helperText: 'Lower numbers appear first',
-                  ),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Asset account'),
-                  subtitle: const Text(
-                    'Assets add to your net worth, liabilities subtract',
-                  ),
-                  value: isAsset,
-                  onChanged: (value) => setState(() => isAsset = value),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Supports reconciliation'),
-                  value: supportsReconciliation,
-                  onChanged: (value) =>
-                      setState(() => supportsReconciliation = value),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
-            ),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
     final label = name.text.trim();
@@ -163,22 +117,12 @@ class AccountTypesScreen extends ConsumerWidget {
     final repo = ref.read(repositoryProvider);
     try {
       if (type == null) {
-        await repo.insertAccountType(
-          label: label,
-          isAsset: isAsset,
-          supportsReconciliation: supportsReconciliation,
-          sortKey: order,
-        );
+        await repo.insertAccountType(label: label, sortKey: order);
       } else {
-        await repo.updateAccountType(
-          type.id,
-          label: label,
-          isAsset: isAsset,
-          supportsReconciliation: supportsReconciliation,
-          sortKey: order,
-        );
+        await repo.updateAccountType(type.id, label: label, sortKey: order);
       }
       ref.invalidate(accountTypesProvider);
+      ref.invalidate(accountTypeTransactionCountsProvider);
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -234,6 +178,8 @@ class AccountTypesScreen extends ConsumerWidget {
     try {
       await ref.read(repositoryProvider).deleteAccountType(type.id);
       ref.invalidate(accountTypesProvider);
+      ref.invalidate(accountTypeTransactionCountsProvider);
+      ref.invalidate(accountTypeTransactionCountsProvider);
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)

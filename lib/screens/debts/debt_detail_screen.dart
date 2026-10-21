@@ -20,8 +20,7 @@ class DebtDetailScreen extends ConsumerStatefulWidget {
 class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
   Debt? _debt;
   bool _loading = true;
-  DebtTransactionFilter _filter = DebtTransactionFilter.all;
-  List<DebtTransactionEntry> _entries = const [];
+  List<Transaction> _transactions = const [];
 
   @override
   void initState() {
@@ -32,24 +31,15 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
   Future<void> _load() async {
     final repo = ref.read(repositoryProvider);
     final debt = await repo.debt(widget.debtId);
-    final entries = debt == null
-        ? const <DebtTransactionEntry>[]
-        : await repo.debtTransactions(debt.id, filter: _filter);
+    final transactions = debt == null
+        ? const <Transaction>[]
+        : await repo.debtTransactions(debt.id);
     if (!mounted) return;
     setState(() {
       _debt = debt;
-      _entries = entries;
+      _transactions = transactions;
       _loading = false;
     });
-  }
-
-  Future<void> _setFilter(DebtTransactionFilter filter) async {
-    setState(() => _filter = filter);
-    final entries = await ref
-        .read(repositoryProvider)
-        .debtTransactions(widget.debtId, filter: filter);
-    if (!mounted) return;
-    setState(() => _entries = entries);
   }
 
   @override
@@ -64,7 +54,9 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
             IconButton(
               tooltip: debt.isArchived ? 'Unarchive debt' : 'Archive debt',
               icon: Icon(
-                debt.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                debt.isArchived
+                    ? Icons.unarchive_outlined
+                    : Icons.archive_outlined,
               ),
               onPressed: _toggleArchive,
             ),
@@ -100,10 +92,6 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
                           ],
                           const SizedBox(height: 16),
                           _DetailRow(
-                            label: 'Original amount',
-                            value: formatMoney(debt.amount, debt.currency),
-                          ),
-                          _DetailRow(
                             label: 'Current balance',
                             value: formatMoney(
                               debt.currentBalance,
@@ -134,32 +122,13 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  SegmentedButton<DebtTransactionFilter>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: DebtTransactionFilter.all,
-                        label: Text('All'),
-                      ),
-                      ButtonSegment(
-                        value: DebtTransactionFilter.increasing,
-                        label: Text('Adding'),
-                      ),
-                      ButtonSegment(
-                        value: DebtTransactionFilter.resolving,
-                        label: Text('Resolving'),
-                      ),
-                    ],
-                    selected: {_filter},
-                    onSelectionChanged: (value) => _setFilter(value.first),
-                  ),
                   const SizedBox(height: 8),
-                  if (_entries.isEmpty)
+                  if (_transactions.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       child: Center(
                         child: Text(
-                          'No transactions in this view.',
+                          'No transactions assigned to this debt.',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -167,33 +136,23 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
                       ),
                     )
                   else
-                    for (final entry in _entries)
+                    for (final transaction in _transactions)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          entry.resolving
-                              ? Icons.south_west
-                              : Icons.north_east,
-                          color: entry.resolving
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.error,
-                        ),
-                        title: Text(entry.transaction.title),
+                        leading: const Icon(Icons.receipt_long_outlined),
+                        title: Text(transaction.title),
                         subtitle: Text(
-                          '${formatShortDate(entry.transaction.date)} • '
-                          '${entry.resolving ? 'Resolving' : 'Adding'}',
+                          transaction.subtitle.isEmpty
+                              ? formatShortDate(transaction.date)
+                              : '${formatShortDate(transaction.date)} • '
+                                    '${transaction.subtitle}',
                         ),
                         trailing: Text(
-                          formatMoney(
-                            entry.transaction.amount,
-                            entry.transaction.currency,
-                          ),
+                          formatMoney(transaction.amount, transaction.currency),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         onTap: () async {
-                          await context.push(
-                            '/edit?tx=${entry.transaction.id}',
-                          );
+                          await context.push('/edit?tx=${transaction.id}');
                           if (mounted) _load();
                         },
                       ),
@@ -226,10 +185,10 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
     final debt = _debt;
     if (debt == null) return;
     final repo = ref.read(repositoryProvider);
-    final entries = await repo.debtTransactions(debt.id);
+    final transactions = await repo.debtTransactions(debt.id);
     if (!mounted) return;
 
-    if (entries.isEmpty) {
+    if (transactions.isEmpty) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -248,16 +207,14 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
         ),
       );
       if (confirmed != true) return;
-      await _completeRemoval(
-        DebtRemovalAction.detach,
-        message: 'Debt deleted',
-      );
+      await _completeRemoval(DebtRemovalAction.detach, message: 'Debt deleted');
       return;
     }
 
     final action = await showActionSheet<DebtRemovalAction>(
       context,
-      title: 'Delete ${debt.label}? What about its ${entries.length} transactions?',
+      title:
+          'Delete ${debt.label}? What about its ${transactions.length} transactions?',
       actions: const [
         SheetAction(
           value: DebtRemovalAction.deleteTransactions,
@@ -283,7 +240,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Delete ${entries.length} transactions?'),
+          title: Text('Delete ${transactions.length} transactions?'),
           content: const Text('This cannot be undone.'),
           actions: [
             TextButton(
@@ -344,15 +301,14 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
     int? targetDebtId,
     required String message,
   }) async {
-    await ref.read(repositoryProvider).removeDebt(
-      widget.debtId,
-      action: action,
-      targetDebtId: targetDebtId,
-    );
+    await ref
+        .read(repositoryProvider)
+        .removeDebt(widget.debtId, action: action, targetDebtId: targetDebtId);
     ref.invalidate(debtsProvider);
     invalidateTransactionData(ref);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
     Navigator.of(context).pop();
   }
 }

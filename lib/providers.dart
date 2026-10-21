@@ -273,15 +273,25 @@ final tagsProvider = FutureProvider<List<Tag>>(
   (ref) => ref.watch(repositoryProvider).tags(),
 );
 
+final tagTransactionCountsProvider = FutureProvider<Map<int, int>>(
+  (ref) => ref.watch(repositoryProvider).tagTransactionCounts(),
+);
+
+final payeeTransactionCountsProvider = FutureProvider<Map<int, int>>(
+  (ref) => ref.watch(repositoryProvider).payeeTransactionCounts(),
+);
+
+final accountTypeTransactionCountsProvider = FutureProvider<Map<int, int>>(
+  (ref) => ref.watch(repositoryProvider).accountTypeTransactionCounts(),
+);
+
 final currenciesProvider = FutureProvider<List<CurrencyInfo>>(
   (ref) => ref.watch(repositoryProvider).currencies(),
 );
 
 final exchangeRatesProvider = FutureProvider<Map<String, double>>((ref) {
   final settings = ref.watch(settingsProvider);
-  return ref
-      .watch(repositoryProvider)
-      .exchangeRatesTo(settings.homeCurrency);
+  return ref.watch(repositoryProvider).exchangeRatesTo(settings.homeCurrency);
 });
 
 final transactionsProvider = FutureProvider<List<Transaction>>((ref) {
@@ -396,6 +406,9 @@ void invalidateTransactionData(WidgetRef ref) {
   ref.invalidate(statsProvider);
   ref.invalidate(budgetsProvider);
   ref.invalidate(debtsProvider);
+  ref.invalidate(tagTransactionCountsProvider);
+  ref.invalidate(payeeTransactionCountsProvider);
+  ref.invalidate(accountTypeTransactionCountsProvider);
 }
 
 void invalidateLookupData(WidgetRef ref) {
@@ -403,4 +416,25 @@ void invalidateLookupData(WidgetRef ref) {
   ref.invalidate(categoryTreeProvider);
   ref.invalidate(payeesProvider);
   ref.invalidate(tagsProvider);
+  ref.invalidate(tagTransactionCountsProvider);
+  ref.invalidate(payeeTransactionCountsProvider);
+  ref.invalidate(accountTypeTransactionCountsProvider);
 }
+
+class CollapsedTransactionDaysNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => <String>{};
+
+  void toggle(String day) {
+    final next = Set<String>.from(state);
+    if (!next.remove(day)) next.add(day);
+    state = next;
+  }
+
+  void clear() => state = <String>{};
+}
+
+final collapsedTransactionDaysProvider =
+    NotifierProvider<CollapsedTransactionDaysNotifier, Set<String>>(
+      CollapsedTransactionDaysNotifier.new,
+    );

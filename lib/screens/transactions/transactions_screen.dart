@@ -63,20 +63,22 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
     final statsRange = ref.watch(transactionStatsRangeProvider);
     final transactions = ref.watch(transactionsProvider);
     final periodTotals = ref.watch(periodTotalsProvider).value;
+    ref.listen(transactionFilterProvider, (previous, next) {
+      if (previous?.accountId != next.accountId) {
+        ref.read(collapsedTransactionDaysProvider.notifier).clear();
+      }
+    });
     final settings = ref.watch(settingsProvider);
     final selectedAccount = filter.accountId == null
         ? null
         : accounts.where((a) => a.id == filter.accountId).firstOrNull;
     final currency = selectedAccount?.currency ?? settings.homeCurrency;
-    final rates = ref.watch(exchangeRatesProvider).value ?? const <String, double>{};
-    final activeAccounts = accounts.where((a) => !a.isArchived).toList();
-    final totalHome = activeAccounts.fold<int>(
+    final rates =
+        ref.watch(exchangeRatesProvider).value ?? const <String, double>{};
+    final totalHome = accounts.fold<int>(
       0,
       (sum, account) =>
-          sum +
-          (account.excludeFromTotals
-              ? 0
-              : (account.balance * (rates[account.currency] ?? 1)).round()),
+          sum + (account.balance * (rates[account.currency] ?? 1)).round(),
     );
     final headerCurrency = selectedAccount?.currency ?? settings.homeCurrency;
     final allItems = transactions.value ?? const <Transaction>[];
@@ -115,225 +117,224 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
       },
       child: Scaffold(
         appBar: AppBar(
-        title: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: _selectionMode
-              ? null
-              : () => _showFundsSheet(context, selectedAccount),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  headerLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  formatMoney(headerBalance, headerCurrency),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: _selectionMode
-            ? [
-                IconButton(
-                  tooltip: 'Clear selection',
-                  icon: const Icon(Icons.close),
-                  onPressed: () => setState(_selectedIds.clear),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Actions',
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      _deleteSelected();
-                    } else if (value == 'remap') {
-                      _showRemapSheet(context);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('Delete'),
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'remap',
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.edit_outlined),
-                        title: Text('Remap'),
-                      ),
-                    ),
-                  ],
-                ),
-              ]
-            : [
-                IconButton(
-                  tooltip: 'Search',
-            icon: Icon(_showSearch ? Icons.close : Icons.search),
-            onPressed: () {
-              if (_showSearch) {
-                _closeSearch();
-              } else {
-                setState(() => _showSearch = true);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _searchFocus.requestFocus();
-                });
-              }
-            },
-          ),
-                IconButton(
-                  tooltip: 'Templates',
-                  icon: const Icon(Icons.repeat_outlined),
-                  onPressed: () => context.push('/templates'),
-                ),
-                IconButton(
-                  tooltip: 'Filter',
-                  icon: Badge(
-                    isLabelVisible:
-                        filter.categoryId != null ||
-                        filter.payeeId != null ||
-                        filter.tagId != null ||
-                        filter.minAmount != null ||
-                        filter.maxAmount != null ||
-                        filter.flow != TransactionFlowFilter.both ||
-                        filter.voidFilter != TransactionVoidFilter.both ||
-                        filter.period != TransactionPeriod.thisMonth,
-                    child: const Icon(Icons.tune),
-                  ),
-                  onPressed: () => _showFilterSheet(context),
-                ),
-              ],
-      ),
-      floatingActionButton: _reorderMode
-          ? FloatingActionButton.extended(
-              onPressed: _saveAccountOrder,
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('Save'),
-            )
-          : accounts.isEmpty || _selectionMode
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () {
-                final accountId = filter.accountId ?? accounts.first.id;
-                context.push('/edit?type=expense&account=$accountId');
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add'),
-            ),
-      body: accounts.isEmpty
-          ? EmptyState(
-              icon: Icons.account_balance_wallet_outlined,
-              title: 'Create your first account',
-              message:
-                  'Accounts hold your transactions. You can create cash, bank '
-                  'or credit card accounts.',
-              actionLabel: 'Add account',
-              onAction: () => context.push('/account/edit'),
-            )
-          : GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragEnd: _reorderMode
-                  ? null
-                  : (details) {
-                      final velocity = details.primaryVelocity ?? 0;
-                      if (velocity.abs() < 250) return;
-                      final ids = <int?>[null, ...accounts.map((a) => a.id)];
-                      final current = ids.indexOf(filter.accountId);
-                      if (current < 0) return;
-                      final next = (current + (velocity < 0 ? 1 : -1)).clamp(
-                        0,
-                        ids.length - 1,
-                      );
-                      if (next != current) {
-                        ref
-                            .read(transactionFilterProvider.notifier)
-                            .setAccount(ids[next]);
-                      }
-                    },
+          title: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: _selectionMode
+                ? null
+                : () => _showFundsSheet(context, selectedAccount),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_showSearch)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocus,
-                        autofocus: true,
-                        decoration: const InputDecoration(
-                          hintText: 'Search transactions',
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        onChanged: ref
-                            .read(transactionFilterProvider.notifier)
-                            .setSearch,
-                      ),
+                  Text(
+                    headerLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
                     ),
-                  if (_reorderMode)
-                    _AccountReorderChips(
-                      accounts: _reorderAccounts!,
-                      onReorder: _onReorderAccount,
-                    )
-                  else
-                    _AccountChips(
-                      accounts: accounts,
-                      selected: filter.accountId,
-                      onStartReorder: () => _startAccountReorder(accounts),
-                      onEditAccount: (account) => context.push(
-                        '/account/edit?id=${account.id}',
-                      ),
-                    ),
-                  transactions.when(
-                    data: (items) => Expanded(
-                      child: _TransactionList(
-                        items: items,
-                        currency: periodTotals?.currency ?? currency,
-                        periodLabel: filter.accountId == null
-                            ? '$periodLabel • $currency'
-                            : periodLabel,
-                        periodTotals: periodTotals,
-                        selectedIds: _selectedIds,
-                        onSelectPeriod: () => _showStatsPeriodSheet(context),
-                        onToggleSelection: (id) => setState(() {
-                          if (!_selectedIds.remove(id)) {
-                            _selectedIds.add(id);
-                          }
-                        }),
-                        onRefresh: () async =>
-                            ref.invalidate(transactionsProvider),
-                      ),
-                    ),
-                    loading: () => const Expanded(
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                    error: (error, stack) => Expanded(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text('Could not load transactions:\n$error'),
-                        ),
-                      ),
-                    ),
+                  ),
+                  Text(
+                    formatMoney(headerBalance, headerCurrency),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
             ),
+          ),
+          actions: _selectionMode
+              ? [
+                  IconButton(
+                    tooltip: 'Clear selection',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(_selectedIds.clear),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Actions',
+                    onSelected: (value) {
+                      if (value == 'delete') {
+                        _deleteSelected();
+                      } else if (value == 'remap') {
+                        _showRemapSheet(context);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.delete_outline),
+                          title: Text('Delete'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'remap',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Remap'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ]
+              : [
+                  IconButton(
+                    tooltip: 'Search',
+                    icon: Icon(_showSearch ? Icons.close : Icons.search),
+                    onPressed: () {
+                      if (_showSearch) {
+                        _closeSearch();
+                      } else {
+                        setState(() => _showSearch = true);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _searchFocus.requestFocus();
+                        });
+                      }
+                    },
+                  ),
+                  IconButton(
+                    tooltip: 'Templates',
+                    icon: const Icon(Icons.repeat_outlined),
+                    onPressed: () => context.push('/templates'),
+                  ),
+                  IconButton(
+                    tooltip: 'Filter',
+                    icon: Badge(
+                      isLabelVisible:
+                          filter.categoryId != null ||
+                          filter.payeeId != null ||
+                          filter.tagId != null ||
+                          filter.minAmount != null ||
+                          filter.maxAmount != null ||
+                          filter.flow != TransactionFlowFilter.both ||
+                          filter.voidFilter != TransactionVoidFilter.both ||
+                          filter.period != TransactionPeriod.thisMonth,
+                      child: const Icon(Icons.tune),
+                    ),
+                    onPressed: () => _showFilterSheet(context),
+                  ),
+                ],
+        ),
+        floatingActionButton: _reorderMode
+            ? FloatingActionButton.extended(
+                onPressed: _saveAccountOrder,
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Save'),
+              )
+            : accounts.isEmpty || _selectionMode
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () {
+                  final accountId = filter.accountId ?? accounts.first.id;
+                  context.push('/edit?type=expense&account=$accountId');
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Add'),
+              ),
+        body: accounts.isEmpty
+            ? EmptyState(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'Create your first account',
+                message:
+                    'Accounts hold your transactions. You can create cash, bank '
+                    'or credit card accounts.',
+                actionLabel: 'Add account',
+                onAction: () => context.push('/account/edit'),
+              )
+            : GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragEnd: _reorderMode
+                    ? null
+                    : (details) {
+                        final velocity = details.primaryVelocity ?? 0;
+                        if (velocity.abs() < 250) return;
+                        final ids = <int?>[null, ...accounts.map((a) => a.id)];
+                        final current = ids.indexOf(filter.accountId);
+                        if (current < 0) return;
+                        final next = (current + (velocity < 0 ? 1 : -1)).clamp(
+                          0,
+                          ids.length - 1,
+                        );
+                        if (next != current) {
+                          ref
+                              .read(transactionFilterProvider.notifier)
+                              .setAccount(ids[next]);
+                        }
+                      },
+                child: Column(
+                  children: [
+                    if (_showSearch)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocus,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            hintText: 'Search transactions',
+                            prefixIcon: Icon(Icons.search),
+                          ),
+                          onChanged: ref
+                              .read(transactionFilterProvider.notifier)
+                              .setSearch,
+                        ),
+                      ),
+                    if (_reorderMode)
+                      _AccountReorderChips(
+                        accounts: _reorderAccounts!,
+                        onReorder: _onReorderAccount,
+                      )
+                    else
+                      _AccountChips(
+                        accounts: accounts,
+                        selected: filter.accountId,
+                        onStartReorder: () => _startAccountReorder(accounts),
+                        onEditAccount: (account) =>
+                            context.push('/account/edit?id=${account.id}'),
+                      ),
+                    transactions.when(
+                      data: (items) => Expanded(
+                        child: _TransactionList(
+                          items: items,
+                          allAccounts: filter.accountId == null,
+                          currency: periodTotals?.currency ?? currency,
+                          periodLabel: filter.accountId == null
+                              ? '$periodLabel • $currency'
+                              : periodLabel,
+                          periodTotals: periodTotals,
+                          selectedIds: _selectedIds,
+                          onSelectPeriod: () => _showStatsPeriodSheet(context),
+                          onToggleSelection: (id) => setState(() {
+                            if (!_selectedIds.remove(id)) {
+                              _selectedIds.add(id);
+                            }
+                          }),
+                          onRefresh: () async =>
+                              ref.invalidate(transactionsProvider),
+                        ),
+                      ),
+                      loading: () => const Expanded(
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (error, stack) => Expanded(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text('Could not load transactions:\n$error'),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
       ),
     );
   }
@@ -372,9 +373,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
     ref.invalidate(accountsProvider);
     ref.invalidate(activeAccountsProvider);
     setState(() => _reorderAccounts = null);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Account order saved')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Account order saved')));
   }
 
   Future<void> _confirmDiscardReorder() async {
@@ -433,12 +433,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
 
   Future<void> _showRemapSheet(BuildContext context) async {
     if (_selectedIds.isEmpty) return;
-    final accounts =
-        (await ref.read(repositoryProvider).activeAccounts());
+    final accounts = (await ref.read(repositoryProvider).activeAccounts());
     if (!context.mounted) return;
     final payees = ref.read(payeesProvider).value ?? const <Payee>[];
-    final categories =
-        ref.read(categoriesProvider).value ?? const <Category>[];
+    final categories = ref.read(categoriesProvider).value ?? const <Category>[];
     final settings = ref.read(settingsProvider);
     final home = settings.homeCurrency;
     int? accountId;
@@ -607,7 +605,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                             PickerEntry(
                               value: payee.id,
                               label: payee.name,
-                              subtitle: payee.iban,
+                              subtitle: payee.description,
                               icon: Icons.person_outline,
                             ),
                         ],
@@ -782,11 +780,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
   ) async {
     final settings = ref.read(settingsProvider);
     final home = settings.homeCurrency;
-    final rates =
-        (await ref.read(repositoryProvider).exchangeRatesTo(home));
-    final accounts = (await ref.read(repositoryProvider).accounts())
-        .where((account) => !account.isArchived)
-        .toList();
+    final rates = (await ref.read(repositoryProvider).exchangeRatesTo(home));
+    final accounts = await ref.read(repositoryProvider).accounts();
     if (!context.mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -838,10 +833,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                       emphasize: true,
                     ),
                   ] else
-                    _FundsRow(
-                      label: 'Default currency',
-                      value: home,
-                    ),
+                    _FundsRow(label: 'Default currency', value: home),
                 ],
               ),
             ),
@@ -851,10 +843,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
         final total = active.fold<int>(
           0,
           (sum, account) =>
-              sum +
-              (account.excludeFromTotals
-                  ? 0
-                  : (account.balance * (rates[account.currency] ?? 1)).round()),
+              sum + (account.balance * (rates[account.currency] ?? 1)).round(),
         );
         return DraggableScrollableSheet(
           expand: false,
@@ -879,18 +868,16 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                 const SizedBox(height: 8),
                 Text(
                   formatMoney(total, home),
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(context).textTheme.headlineMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 16),
                 for (final account in active) ...[
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
-                      backgroundColor: colorFromDb(
-                        account.color,
-                      ).withValues(alpha: 0.18),
+                      backgroundColor: colorFromDb(account.color)
+                          .withValues(alpha: 0.18),
                       child: Icon(
                         iconForAccountType(account.type),
                         color: colorFromDb(account.color),
@@ -911,9 +898,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                             '≈ ${formatMoney((account.balance * (rates[account.currency] ?? 1)).round(), home)}',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                           ),
                       ],
@@ -962,17 +949,14 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
       lastDate: now,
       initialDateRange:
           currentRange ??
-          DateTimeRange(
-            start: DateTime(now.year, now.month, 1),
-            end: now,
-          ),
+          DateTimeRange(start: DateTime(now.year, now.month, 1), end: now),
       helpText: 'Statistics period',
     );
     if (range == null) return;
     ref.read(transactionStatsRangeProvider.notifier).set(range);
-    ref.read(transactionStatsPeriodProvider.notifier).set(
-      TransactionPeriod.custom,
-    );
+    ref
+        .read(transactionStatsPeriodProvider.notifier)
+        .set(TransactionPeriod.custom);
   }
 
   Future<void> _showFilterSheet(BuildContext context) async {
@@ -1031,10 +1015,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                   ),
                   items: [
                     for (final value in TransactionPeriod.values)
-                      DropdownMenuItem(
-                        value: value,
-                        child: Text(value.label),
-                      ),
+                      DropdownMenuItem(value: value, child: Text(value.label)),
                   ],
                   onChanged: (value) {
                     if (value != null) setModalState(() => period = value);
@@ -1130,7 +1111,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                           PickerEntry(
                             value: payee.id,
                             label: payee.name,
-                            subtitle: payee.iban,
+                            subtitle: payee.description,
                             icon: Icons.person_outline,
                           ),
                       ],
@@ -1418,10 +1399,7 @@ class _AccountChips extends ConsumerWidget {
 }
 
 class _AccountReorderChips extends StatelessWidget {
-  const _AccountReorderChips({
-    required this.accounts,
-    required this.onReorder,
-  });
+  const _AccountReorderChips({required this.accounts, required this.onReorder});
 
   final List<Account> accounts;
   final ReorderCallback onReorder;
@@ -1465,6 +1443,7 @@ class _AccountReorderChips extends StatelessWidget {
 class _TransactionList extends ConsumerWidget {
   const _TransactionList({
     required this.items,
+    required this.allAccounts,
     required this.currency,
     required this.periodLabel,
     required this.periodTotals,
@@ -1475,6 +1454,7 @@ class _TransactionList extends ConsumerWidget {
   });
 
   final List<Transaction> items;
+  final bool allAccounts;
   final String currency;
   final String periodLabel;
   final PeriodTotals? periodTotals;
@@ -1522,6 +1502,7 @@ class _TransactionList extends ConsumerWidget {
       grouped.putIfAbsent(key, () => []).add(item);
     }
     final keys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+    final collapsedDays = ref.watch(collapsedTransactionDaysProvider);
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -1544,20 +1525,30 @@ class _TransactionList extends ConsumerWidget {
             ),
           ),
           for (final key in keys) ...[
-            SliverToBoxAdapter(child: _DayHeader(date: DateTime.parse(key))),
-            SliverList.builder(
-              itemCount: grouped[key]!.length,
-              itemBuilder: (context, index) {
-                final transaction = grouped[key]![index];
-                return _TransactionTile(
-                  transaction: transaction,
-                  accountColor: accountColors[transaction.accountId],
-                  selectionMode: selectedIds.isNotEmpty,
-                  selected: selectedIds.contains(transaction.id),
-                  onToggleSelection: () => onToggleSelection(transaction.id),
-                );
-              },
+            SliverToBoxAdapter(
+              child: _DayHeader(
+                date: DateTime.parse(key),
+                collapsed: collapsedDays.contains(key),
+                onToggle: () => ref
+                    .read(collapsedTransactionDaysProvider.notifier)
+                    .toggle(key),
+              ),
             ),
+            if (!collapsedDays.contains(key))
+              SliverList.builder(
+                itemCount: grouped[key]!.length,
+                itemBuilder: (context, index) {
+                  final transaction = grouped[key]![index];
+                  return _TransactionTile(
+                    transaction: transaction,
+                    accountColor: accountColors[transaction.accountId],
+                    allAccounts: allAccounts,
+                    selectionMode: selectedIds.isNotEmpty,
+                    selected: selectedIds.contains(transaction.id),
+                    onToggleSelection: () => onToggleSelection(transaction.id),
+                  );
+                },
+              ),
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 96)),
         ],
@@ -1691,20 +1682,44 @@ class _SummaryItem extends StatelessWidget {
 }
 
 class _DayHeader extends StatelessWidget {
-  const _DayHeader({required this.date});
+  const _DayHeader({
+    required this.date,
+    required this.collapsed,
+    required this.onToggle,
+  });
 
   final DateTime date;
+  final bool collapsed;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
-      child: Text(
-        formatDayHeader(date),
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
+    return InkWell(
+      onTap: onToggle,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                formatDayHeader(date),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            AnimatedRotation(
+              turns: collapsed ? -0.25 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: Icon(
+                Icons.expand_more,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1715,6 +1730,7 @@ class _TransactionTile extends ConsumerWidget {
   const _TransactionTile({
     required this.transaction,
     this.accountColor,
+    required this.allAccounts,
     required this.selectionMode,
     required this.selected,
     required this.onToggleSelection,
@@ -1722,6 +1738,7 @@ class _TransactionTile extends ConsumerWidget {
 
   final Transaction transaction;
   final int? accountColor;
+  final bool allAccounts;
   final bool selectionMode;
   final bool selected;
   final VoidCallback onToggleSelection;
@@ -1730,6 +1747,17 @@ class _TransactionTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isTransfer = transaction.isTransfer;
+    final combinedTransfer = isTransfer && allAccounts;
+    final title = combinedTransfer
+        ? 'Transfer: ${transaction.accountLabel ?? ''} → '
+              '${transaction.transferAccountLabel ?? ''}'
+        : transaction.title;
+    final subtitle = combinedTransfer
+        ? (transaction.comment.isEmpty ? '' : transaction.comment)
+        : transaction.subtitle;
+    final amount = combinedTransfer
+        ? transaction.amount.abs()
+        : transaction.amount;
     final accountAccent = accountColor == null
         ? null
         : colorFromDb(accountColor);
@@ -1773,7 +1801,7 @@ class _TransactionTile extends ConsumerWidget {
           ),
         ),
         title: Text(
-          transaction.title,
+          title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -1782,10 +1810,10 @@ class _TransactionTile extends ConsumerWidget {
             decoration: transaction.isVoid ? TextDecoration.lineThrough : null,
           ),
         ),
-        subtitle: transaction.subtitle.isEmpty
+        subtitle: subtitle.isEmpty
             ? null
             : Text(
-                transaction.subtitle,
+                subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -1797,7 +1825,7 @@ class _TransactionTile extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              formatMoney(transaction.amount, transaction.currency),
+              formatMoney(amount, transaction.currency),
               style: theme.textTheme.titleSmall?.copyWith(
                 color: amountColor,
                 fontWeight: FontWeight.w700,

@@ -278,7 +278,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
               Expanded(
                 child: FilledButton(
                   onPressed: () => _save(currency, addTransaction: true),
-                  child: const Text('Save & add'),
+                  child: const Text('Save & use'),
                 ),
               ),
             ],
@@ -385,7 +385,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           PickerEntry(
             value: payee.id,
             label: payee.name,
-            subtitle: payee.iban,
+            subtitle: payee.description,
             icon: Icons.person_outline,
           ),
       ],

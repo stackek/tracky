@@ -48,15 +48,8 @@ class StatsScreen extends ConsumerWidget {
         title: Text(
           statsData == null
               ? 'Statistics'
-              : formatMoney(
-                  statsData.net,
-                  statsData.currency,
-                  signed: true,
-                ),
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: totalColor,
-          ),
+              : formatMoney(statsData.net, statsData.currency, signed: true),
+          style: TextStyle(fontWeight: FontWeight.w700, color: totalColor),
         ),
       ),
       body: GestureDetector(
@@ -102,8 +95,7 @@ class StatsScreen extends ConsumerWidget {
                       ),
                       alignment: Alignment.centerLeft,
                     ),
-                    onPressed: () =>
-                        _showAccountMenu(context, ref, accounts),
+                    onPressed: () => _showAccountMenu(context, ref, accounts),
                     child: Row(
                       children: [
                         Icon(
@@ -114,9 +106,7 @@ class StatsScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
-                            selectedAccount?.label ?? 'All accounts',
-                          ),
+                          child: Text(selectedAccount?.label ?? 'All accounts'),
                         ),
                         const Icon(Icons.chevron_right, size: 18),
                       ],
@@ -134,9 +124,8 @@ class StatsScreen extends ConsumerWidget {
                           data: data,
                           theme: theme,
                           type: statsType,
-                          onTypeChanged: (value) => ref
-                              .read(statsTypeProvider.notifier)
-                              .set(value),
+                          onTypeChanged: (value) =>
+                              ref.read(statsTypeProvider.notifier).set(value),
                         ),
                         const SizedBox(height: 22),
                         if (categories.isEmpty)
@@ -425,35 +414,207 @@ class _BigCard extends StatelessWidget {
   }
 }
 
-class _CategoryBreakdown extends StatefulWidget {
+class _CategoryBreakdown extends ConsumerStatefulWidget {
   const _CategoryBreakdown({required this.data, required this.type});
 
   final StatsData data;
   final StatsType type;
 
   @override
-  State<_CategoryBreakdown> createState() => _CategoryBreakdownState();
+  ConsumerState<_CategoryBreakdown> createState() => _CategoryBreakdownState();
 }
 
-class _CategoryBreakdownState extends State<_CategoryBreakdown> {
-  int _selectedIndex = -1;
+class _CategoryBreakdownState extends ConsumerState<_CategoryBreakdown> {
+  int? _selectedCategoryId;
   bool _percent = true;
+  final Set<int> _expanded = {};
+
+  @override
+  void didUpdateWidget(covariant _CategoryBreakdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.type != widget.type) {
+      _expanded.clear();
+      _selectedCategoryId = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final categories = widget.data.byCategoryFor(widget.type);
-    final total = categories.fold<int>(
+    final categories =
+        ref.watch(categoriesProvider).value ?? const <Category>[];
+    final childrenByParent = <int, List<Category>>{};
+    for (final category in categories) {
+      final parent = category.parentId;
+      if (parent != null && parent != 0 && parent != category.id) {
+        childrenByParent.putIfAbsent(parent, () => []).add(category);
+      }
+    }
+    for (final list in childrenByParent.values) {
+      list.sort(
+        (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+      );
+    }
+
+    final direct = widget.data.directAmountsFor(widget.type);
+    final memo = <int, int>{};
+    int totalFor(int id) {
+      final cached = memo[id];
+      if (cached != null) return cached;
+      var sum = direct[id] ?? 0;
+      for (final child in childrenByParent[id] ?? const <Category>[]) {
+        sum += totalFor(child.id);
+      }
+      memo[id] = sum;
+      return sum;
+    }
+
+    final roots = widget.data.byCategoryFor(widget.type);
+
+    List<Category> childrenOf(int id) =>
+        (childrenByParent[id] ?? const <Category>[])
+            .where((child) => totalFor(child.id) > 0)
+            .toList();
+
+    CategoryTotal withTotal(CategoryTotal node) => CategoryTotal(
+      categoryId: node.categoryId,
+      label: node.label,
+      icon: node.icon,
+      color: node.color,
+      amount: totalFor(node.categoryId),
+    );
+
+    CategoryTotal childTotal(Category child) => CategoryTotal(
+      categoryId: child.id,
+      label: child.label,
+      icon: child.icon,
+      color: child.color,
+      amount: totalFor(child.id),
+    );
+
+    CategoryTotal otherTotal(CategoryTotal node, int amount) => CategoryTotal(
+      categoryId: -1000000 - node.categoryId,
+      label: 'Other',
+      icon: node.icon,
+      color: node.color,
+      amount: amount,
+    );
+
+    bool canExpand(CategoryTotal item) =>
+        item.categoryId >= 0 && childrenOf(item.categoryId).isNotEmpty;
+
+    final listEntries = <_CategoryEntry>[];
+    void addListEntry(CategoryTotal node, int depth) {
+      final children = childrenOf(node.categoryId);
+      final expanded =
+          children.isNotEmpty && _expanded.contains(node.categoryId);
+      listEntries.add(
+        _CategoryEntry(
+          category: withTotal(node),
+          depth: depth,
+          expanded: expanded,
+          expandable: children.isNotEmpty,
+        ),
+      );
+      if (!expanded) return;
+      for (final child in children) {
+        addListEntry(childTotal(child), depth + 1);
+      }
+      final own = direct[node.categoryId] ?? 0;
+      if (own > 0) {
+        listEntries.add(
+          _CategoryEntry(
+            category: otherTotal(node, own),
+            depth: depth + 1,
+            expanded: false,
+            expandable: false,
+          ),
+        );
+      }
+    }
+
+    final pieSlices = <CategoryTotal>[];
+    final pieDepths = <int>[];
+    void addPieSlice(CategoryTotal node, int depth) {
+      final children = childrenOf(node.categoryId);
+      if (children.isNotEmpty && _expanded.contains(node.categoryId)) {
+        for (final child in children) {
+          addPieSlice(childTotal(child), depth + 1);
+        }
+        final own = direct[node.categoryId] ?? 0;
+        if (own > 0) {
+          pieSlices.add(otherTotal(node, own));
+          pieDepths.add(depth + 1);
+        }
+      } else {
+        pieSlices.add(withTotal(node));
+        pieDepths.add(depth);
+      }
+    }
+
+    for (final root in roots) {
+      addListEntry(root, 0);
+      addPieSlice(root, 0);
+    }
+
+    final displayColors = <int, Color>{};
+    final usedColors = <Color>[];
+    for (var i = 0; i < pieSlices.length; i++) {
+      final base = HSVColor.fromColor(colorFromDb(pieSlices[i].color));
+      final depth = pieDepths[i];
+      var hue = base.hue;
+      if (depth > 0) hue = (hue + 14 + depth * 8) % 360;
+      var saturation = base.saturation < 0.15 ? 0.55 : base.saturation;
+      var value = depth > 0
+          ? (base.value * (1 - 0.04 * depth)).clamp(0.35, 1.0)
+          : base.value;
+      var adjusted = HSVColor.fromAHSV(1, hue, saturation, value).toColor();
+      var guard = 0;
+      while (guard++ < 80 &&
+          usedColors.any(
+            (color) =>
+                _hueDistance(
+                  HSVColor.fromColor(color).hue,
+                  HSVColor.fromColor(adjusted).hue,
+                ) <
+                12,
+          )) {
+        hue = (hue + 17) % 360;
+        adjusted = HSVColor.fromAHSV(1, hue, saturation, value).toColor();
+      }
+      displayColors[pieSlices[i].categoryId] = adjusted;
+      usedColors.add(adjusted);
+    }
+
+    final total = pieSlices.fold<int>(
       0,
       (sum, category) => sum + category.amount,
     );
-    final selected = _selectedIndex >= 0 && _selectedIndex < categories.length
-        ? categories[_selectedIndex]
-        : null;
+    final selected = pieSlices
+        .where((item) => item.categoryId == _selectedCategoryId)
+        .firstOrNull;
+    final selectedIndex = pieSlices.indexWhere(
+      (item) => item.categoryId == _selectedCategoryId,
+    );
+
+    void handleTap(CategoryTotal item) {
+      setState(() {
+        if (canExpand(item)) {
+          if (!_expanded.remove(item.categoryId)) {
+            _expanded.add(item.categoryId);
+          }
+          _selectedCategoryId = null;
+        } else {
+          _selectedCategoryId = _selectedCategoryId == item.categoryId
+              ? null
+              : item.categoryId;
+        }
+      });
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onTap: () => setState(() => _selectedIndex = -1),
+      onTap: () => setState(() => _selectedCategoryId = null),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -501,26 +662,26 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
                           final touched =
                               response?.touchedSection?.touchedSectionIndex ??
                               -1;
-                          setState(() {
-                            _selectedIndex = touched == _selectedIndex
-                                ? -1
-                                : touched;
-                          });
+                          if (touched >= 0 && touched < pieSlices.length) {
+                            handleTap(pieSlices[touched]);
+                          }
                         }
                       },
                     ),
                     sections: [
-                      for (var i = 0; i < categories.length; i++)
+                      for (var i = 0; i < pieSlices.length; i++)
                         PieChartSectionData(
-                          value: categories[i].amount.toDouble(),
-                          color: colorFromDb(categories[i].color),
-                          radius: _selectedIndex == i ? 64 : 50,
-                          showTitle: _selectedIndex == i,
-                          title: _selectedIndex == i
+                          value: pieSlices[i].amount.toDouble(),
+                          color:
+                              displayColors[pieSlices[i].categoryId] ??
+                              colorFromDb(pieSlices[i].color),
+                          radius: selectedIndex == i ? 64 : 50,
+                          showTitle: selectedIndex == i,
+                          title: selectedIndex == i
                               ? (_percent
-                                    ? '${_percentage(categories[i].amount, total)}%'
+                                    ? '${_percentage(pieSlices[i].amount, total)}%'
                                     : formatMoney(
-                                        categories[i].amount,
+                                        pieSlices[i].amount,
                                         widget.data.currency,
                                       ))
                               : '',
@@ -559,7 +720,9 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
                     children: [
                       Icon(
                         iconForCategory(selected.icon),
-                        color: colorFromDb(selected.color),
+                        color:
+                            displayColors[selected.categoryId] ??
+                            colorFromDb(selected.color),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -579,15 +742,20 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
             ),
           ),
           const SizedBox(height: 10),
-          for (var i = 0; i < categories.length; i++)
+          for (final entry in listEntries)
             _CategoryRow(
-              category: categories[i],
+              category: entry.category,
+              color: displayColors[entry.category.categoryId],
               currency: widget.data.currency,
               percent: _percent,
               total: total,
-              selected: _selectedIndex == i,
-              onTap: () =>
-                  setState(() => _selectedIndex = _selectedIndex == i ? -1 : i),
+              selected:
+                  entry.expanded ||
+                  _selectedCategoryId == entry.category.categoryId,
+              expandable: entry.expandable,
+              expanded: entry.expanded,
+              indent: entry.depth * 18,
+              onTap: () => handleTap(entry.category),
             ),
         ],
       ),
@@ -595,44 +763,66 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
   }
 }
 
+class _CategoryEntry {
+  const _CategoryEntry({
+    required this.category,
+    required this.depth,
+    required this.expanded,
+    required this.expandable,
+  });
+
+  final CategoryTotal category;
+  final int depth;
+  final bool expanded;
+  final bool expandable;
+}
+
 class _CategoryRow extends StatelessWidget {
   const _CategoryRow({
     required this.category,
+    this.color,
     required this.currency,
     required this.percent,
     required this.total,
     required this.selected,
+    required this.expandable,
+    required this.expanded,
+    required this.indent,
     required this.onTap,
   });
 
   final CategoryTotal category;
+  final Color? color;
   final String currency;
   final bool percent;
   final int total;
   final bool selected;
+  final bool expandable;
+  final bool expanded;
+  final double indent;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = colorFromDb(category.color);
+    final rowColor = color ?? colorFromDb(category.color);
     return Material(
-      color: selected ? color.withValues(alpha: 0.16) : Colors.transparent,
+      color: selected ? rowColor.withValues(alpha: 0.16) : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: EdgeInsets.fromLTRB(8 + indent, 8, 8, 8),
           child: Row(
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundColor: color.withValues(alpha: 0.18),
+                backgroundColor: rowColor.withValues(alpha: 0.18),
                 child: Icon(
                   iconForCategory(category.icon),
                   size: 18,
-                  color: color,
+                  color: rowColor,
                 ),
               ),
               const SizedBox(width: 12),
@@ -654,6 +844,19 @@ class _CategoryRow extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              if (expandable)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(
+                      Icons.expand_more,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -664,3 +867,8 @@ class _CategoryRow extends StatelessWidget {
 
 String _percentage(int amount, int total) =>
     total == 0 ? '0' : (amount * 100 / total).round().toString();
+
+double _hueDistance(double a, double b) {
+  final difference = (a - b).abs() % 360;
+  return difference > 180 ? 360 - difference : difference;
+}
