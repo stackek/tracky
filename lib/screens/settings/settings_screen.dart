@@ -16,7 +16,6 @@ class SettingsScreen extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final currencies =
         ref.watch(currenciesProvider).value ?? const <CurrencyInfo>[];
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -78,29 +77,6 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: const Text('Create or restore a My Expenses backup'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/backup'),
-          ),
-          const Divider(),
-          _Header('About'),
-          ListTile(
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('Open source licences'),
-            onTap: () => showLicensePage(
-              context: context,
-              applicationName: 'My Expenses Open',
-              applicationVersion: '1.0.0',
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text(
-              'My Expenses Open is free software, licensed under the GNU '
-              'General Public License v3. It contains no advertising, analytics '
-              'or payment features. Your data stays on your device unless you '
-              'explicitly export it.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
           ),
         ],
       ),

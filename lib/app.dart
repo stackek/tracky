@@ -13,6 +13,7 @@ import 'screens/categories/categories_screen.dart';
 import 'screens/categories/category_editor_screen.dart';
 import 'screens/debts/debts_screen.dart';
 import 'screens/home_shell.dart';
+import 'screens/more/about_screen.dart';
 import 'screens/more/more_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/payees/payees_screen.dart';
@@ -71,6 +72,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/about',
+        builder: (context, state) => const AboutScreen(),
       ),
       GoRoute(
         path: '/edit',

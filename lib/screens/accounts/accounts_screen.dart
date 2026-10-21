@@ -14,7 +14,6 @@ class AccountsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accounts = ref.watch(accountsProvider);
-    final settings = ref.watch(settingsProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Accounts'),
@@ -38,33 +37,11 @@ class AccountsScreen extends ConsumerWidget {
               onAction: () => context.push('/account/edit'),
             );
           }
-          final totals = <String, int>{};
-          for (final account in items) {
-            if (account.excludeFromTotals) continue;
-            totals[account.currency] =
-                (totals[account.currency] ?? 0) + account.balance;
-          }
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(accountsProvider),
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               children: [
-                if (totals.isNotEmpty)
-                  SizedBox(
-                    height: 96,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        for (final entry in totals.entries)
-                          _TotalCard(
-                            currency: entry.key,
-                            amount: entry.value,
-                            isHome: entry.key == settings.homeCurrency,
-                          ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 12),
                 for (final account in items) ...[
                   _AccountCard(account: account),
                   const SizedBox(height: 10),
@@ -75,73 +52,6 @@ class AccountsScreen extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(child: Text('Could not load accounts:\n$error')),
-      ),
-    );
-  }
-}
-
-class _TotalCard extends StatelessWidget {
-  const _TotalCard({
-    required this.currency,
-    required this.amount,
-    required this.isHome,
-  });
-
-  final String currency;
-  final int amount;
-  final bool isHome;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: 190,
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isHome
-            ? theme.colorScheme.primaryContainer
-            : theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isHome ? Icons.home_outlined : Icons.public,
-                size: 16,
-                color: isHome
-                    ? theme.colorScheme.onPrimaryContainer
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                isHome ? 'Total ($currency)' : currency,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: isHome
-                      ? theme.colorScheme.onPrimaryContainer
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              formatMoney(amount, currency),
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: isHome
-                    ? theme.colorScheme.onPrimaryContainer
-                    : theme.colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

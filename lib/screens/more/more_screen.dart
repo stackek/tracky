@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../providers.dart';
 
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final counts = ref.watch(repositoryProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('More')),
+      appBar: AppBar(
+        title: const Text('More'),
+        actions: [
+          IconButton(
+            tooltip: 'About',
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => context.push('/about'),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 100),
         children: [
@@ -83,50 +88,6 @@ class MoreScreen extends ConsumerWidget {
                 onTap: () => context.push('/settings'),
               ),
             ],
-          ),
-          _Group(
-            title: 'About',
-            children: [
-              FutureBuilder(
-                future: counts.counts(),
-                builder: (context, snapshot) {
-                  final counts = snapshot.data;
-                  return _Tile(
-                    icon: Icons.storage_outlined,
-                    title: 'Your data',
-                    subtitle: counts == null
-                        ? 'Loading…'
-                        : '${counts['transactions']} transactions • '
-                            '${counts['accounts']} accounts • '
-                            '${counts['categories']} categories',
-                  );
-                },
-              ),
-              _Tile(
-                icon: Icons.code,
-                title: 'Licence',
-                subtitle: 'GNU General Public License v3.0',
-                onTap: () => launchUrl(
-                  Uri.parse('https://www.gnu.org/licenses/gpl-3.0.html'),
-                  mode: LaunchMode.externalApplication,
-                ),
-              ),
-              _Tile(
-                icon: Icons.favorite_outline,
-                title: 'Free forever',
-                subtitle: 'No ads, subscriptions or payments',
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: Text(
-              'My Expenses Open 1.0.0\nMade with Flutter',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
           ),
         ],
       ),
