@@ -20,15 +20,34 @@ class TransactionsScreen extends ConsumerStatefulWidget {
   ConsumerState<TransactionsScreen> createState() => _TransactionsScreenState();
 }
 
-class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
+class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
+    with WidgetsBindingObserver {
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
   bool _showSearch = false;
+  bool _keyboardWasVisible = false;
   final Set<int> _selectedIds = {};
   bool get _selectionMode => _selectedIds.isNotEmpty;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+    final visible = View.of(context).viewInsets.bottom > 0;
+    if (_keyboardWasVisible && !visible && _showSearch) {
+      _closeSearch();
+    }
+    _keyboardWasVisible = visible;
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
