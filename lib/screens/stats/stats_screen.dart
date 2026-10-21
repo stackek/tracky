@@ -39,42 +39,6 @@ class StatsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Statistics'),
-        actions: [
-          PopupMenuButton<int>(
-            tooltip: 'Account',
-            icon: const Icon(Icons.filter_alt_outlined),
-            initialValue: accountId ?? -1,
-            onSelected: (value) => ref
-                .read(statsAccountProvider.notifier)
-                .set(value == -1 ? null : value),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: -1,
-                child: Row(
-                  children: [
-                    const Icon(Icons.public, size: 18),
-                    const SizedBox(width: 8),
-                    const Expanded(child: Text('All accounts')),
-                    if (accountId == null) const Icon(Icons.check, size: 18),
-                  ],
-                ),
-              ),
-              for (final account in accounts)
-                PopupMenuItem(
-                  value: account.id,
-                  child: Row(
-                    children: [
-                      Icon(iconForAccountType(account.type), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(account.label)),
-                      if (accountId == account.id)
-                        const Icon(Icons.check, size: 18),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ],
       ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
