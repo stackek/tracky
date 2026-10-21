@@ -371,7 +371,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       }
     } else if (action == 'share') {
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], subject: 'My Expenses backup'),
+        ShareParams(files: [XFile(file.path)], subject: 'Tracky backup'),
       );
     }
   }
@@ -415,7 +415,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
 
   Future<void> _exportCsv() async {
     final service = CsvService(ref.read(repositoryProvider));
-    final temp = Directory.systemTemp.createTempSync('myexpenses-csv');
+    final temp = Directory.systemTemp.createTempSync('tracky-csv');
     final file = File('${temp.path}/transactions.csv');
     final exported = await runWithProgress<File>(
       context,

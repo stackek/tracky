@@ -152,14 +152,14 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class MyExpensesApp extends ConsumerStatefulWidget {
-  const MyExpensesApp({super.key});
+class TrackyApp extends ConsumerStatefulWidget {
+  const TrackyApp({super.key});
 
   @override
-  ConsumerState<MyExpensesApp> createState() => _MyExpensesAppState();
+  ConsumerState<TrackyApp> createState() => _TrackyAppState();
 }
 
-class _MyExpensesAppState extends ConsumerState<MyExpensesApp>
+class _TrackyAppState extends ConsumerState<TrackyApp>
     with WidgetsBindingObserver {
   @override
   void initState() {
@@ -192,7 +192,7 @@ class _MyExpensesAppState extends ConsumerState<MyExpensesApp>
     final settings = ref.watch(settingsProvider);
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'My Expenses Open',
+      title: 'Tracky',
       debugShowCheckedModeBanner: false,
       themeMode: settings.themeMode,
       theme: buildLightTheme(null),

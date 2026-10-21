@@ -17,7 +17,7 @@ Future<void> main() async {
         preferencesProvider.overrideWithValue(preferences),
         databaseProvider.overrideWithValue(database),
       ],
-      child: const MyExpensesApp(),
+      child: const TrackyApp(),
     ),
   );
 }

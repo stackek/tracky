@@ -10,7 +10,7 @@ import '../../providers.dart';
 
 Future<File?> pickBackupFile() async {
   final files = await FilePicker.pickFiles(
-    dialogTitle: 'Select a My Expenses backup',
+    dialogTitle: 'Select a backup',
     type: FileType.custom,
     allowedExtensions: ['zip', 'enc'],
   );
@@ -33,7 +33,7 @@ Future<String?> askBackupPassword(
           Text(
             confirm
                 ? 'Choose a password. You will need it to restore this backup.'
-                : 'This backup is encrypted. Enter the password you used in My Expenses.',
+                : 'This backup is encrypted. Enter the password used to create it.',
           ),
           const SizedBox(height: 16),
           TextField(

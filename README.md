@@ -1,12 +1,13 @@
-# My Expenses Open
+# Tracky
 
 A free, open source, privacy-first expense tracker for Android, written in
-Flutter. It is designed as a modern replacement for
-[My Expenses](https://github.com/mtotschnig/MyExpenses) and can restore backups
-created by My Expenses without losing data.
+Flutter.
 
 There are **no payments, subscriptions, ads, analytics or accounts**. The app
 has no network permission and stores everything locally.
+
+Tracky is compatible with My Expenses backups, so existing `.zip` and `.enc`
+backups can be restored without losing data.
 
 ## Features
 
@@ -17,19 +18,21 @@ has no network permission and stores everything locally.
 - Hierarchical expense and income categories with colours and icons.
 - Payees, payment methods and tags.
 - Receipt and photo attachments.
-- Fast transaction entry with search, account filters, date ranges, category
-  and payee filters.
-- Statistics: monthly income/expense/net, spending by category and a six-month
-  comparison chart.
+- Fast transaction entry with search, account filters, date ranges, category,
+  payee, tag, amount and void filters.
+- Statistics with selectable accounts and date ranges, income/expense totals,
+  spending by category and a six-month comparison chart.
 - Monthly budgets with per-category allocations and progress.
 - Reusable transaction templates.
 - CSV export and import for spreadsheets.
-- Full backup and restore, compatible with My Expenses backups.
+- Full backup and restore, including encrypted backups and My Expenses backup
+  compatibility.
 - Material 3 interface with light, dark and system themes.
 
 ## Backup compatibility
 
-A My Expenses backup is a ZIP file containing:
+Tracky reads and writes the My Expenses backup format. A backup is a ZIP file
+containing:
 
 ```
 BACKUP                          SQLite database
@@ -38,22 +41,15 @@ ui_settings.preferences_pb      optional DataStore preferences
 Pictures/<attachment-id>_<name> receipt pictures
 ```
 
-This app reads and writes exactly that format:
-
-- **Restore** accepts ordinary `.zip` backups and password protected `.enc`
-  backups. Encrypted backups use the same algorithm as My Expenses:
-  AES-256-GCM, key = SHA-256(password), 12-byte nonce, magic `ME_ENC_01`.
-- **Export** produces a standard My Expenses ZIP. A fresh database is created
-  with My Expenses schema version 183, which both older and current My Expenses
-  releases can open and upgrade. Imported databases keep their original schema
-  version.
-- Receipt pictures are stored with the `<attachments._id>_<filename>` naming
-  convention expected by My Expenses, so they are restored on both sides.
-- Preferences such as the home currency and theme are read from
-  `BACKUP_PREF`; unknown preferences are preserved for future exports.
-
-The test backup `myexpenses-backup-20261017-000003.zip` created by My Expenses
-was used to validate the importer.
+- **Restore** accepts ordinary `.zip` backups and password-protected `.enc`
+  backups. For encrypted backups Tracky asks for the password and decrypts
+  them locally with AES-256-GCM.
+- **Export** produces a standard backup ZIP. A fresh database is created with
+  schema version 183.
+- Receipt pictures keep the `<attachments._id>_<filename>` naming convention,
+  so they are restored correctly.
+- Preferences such as the home currency and theme are read from `BACKUP_PREF`;
+  unknown preferences are preserved for future exports.
 
 ## Development with Nix
 
@@ -81,17 +77,16 @@ development shell.
 ## Architecture
 
 - Flutter + Material 3, Riverpod for state, go_router for navigation.
-- `sqflite` with the original My Expenses schema. Using the same schema makes
-  migration lossless and keeps backup export bidirectional.
+- `sqflite` with a backup-compatible schema.
 - Repository layer in `lib/data/`, domain models in `lib/models/`, screens in
   `lib/screens/`.
 - No network calls, no third-party SDKs, no telemetry.
 
-## Implemented compared with My Expenses
+## Status
 
 Implemented: accounts, transactions, transfers, splits, categories, payees,
 payment methods, tags, attachments, filters, statistics, budgets, templates,
-CSV, backup/restore, multiple currencies, themes.
+CSV, backup/restore, multiple currencies and themes.
 
 Not implemented (yet): bank sync (WebDAV/Dropbox/Google Drive/OneDrive),
 FinTS/HBCI, home screen widgets, OCR, calendar-based recurring plan execution,
@@ -102,7 +97,3 @@ exported without losing it.
 ## Licence
 
 GNU General Public License v3.0. See [LICENSE](LICENSE).
-
-My Expenses is a separate project by Michael Totschnig and contributors; this
-project is an independent, compatible implementation. The My Expenses schema
-and backup design are reused for interoperability.

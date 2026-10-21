@@ -266,7 +266,7 @@ class Repository {
   }
 
   /// Returns the latest available exchange rate from each currency to
-  /// [homeCurrency], using the prices table maintained by My Expenses.
+  /// [homeCurrency], using the compatible prices table.
   Future<Map<String, double>> exchangeRatesTo(String homeCurrency) async {
     final rates = <String, double>{homeCurrency: 1.0};
     final direct = await db.rawQuery('''

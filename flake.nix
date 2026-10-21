@@ -1,5 +1,5 @@
 {
-  description = "My Expenses Open - an open source, free (as in freedom and beer) expense tracker with My Expenses backup compatibility";
+  description = "Tracky - an open source, free (as in freedom and beer) expense tracker. Compatible with My Expenses backups.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -76,7 +76,7 @@
               export PUB_CACHE="$PWD/.pub-cache"
               export GRADLE_USER_HOME="$PWD/.gradle"
               mkdir -p "$PUB_CACHE" "$GRADLE_USER_HOME"
-              echo "My Expenses Open development shell"
+              echo "Tracky development shell"
               echo "  flutter: $(flutter --version 2>/dev/null | head -n1)"
               echo "  android: $ANDROID_HOME"
               echo "  build:   flutter build apk --release"

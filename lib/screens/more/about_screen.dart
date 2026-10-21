@@ -24,7 +24,7 @@ class AboutScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'My Expenses Open',
+            'Tracky',
             textAlign: TextAlign.center,
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w700,
@@ -42,7 +42,8 @@ class AboutScreen extends ConsumerWidget {
           Text(
             'A free, open source and privacy-first expense tracker. It contains '
             'no advertising, analytics or payment features. Your data stays on '
-            'your device unless you explicitly export it.',
+            'your device unless you explicitly export it. Tracky is compatible '
+            'with My Expenses backups.',
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 24),
@@ -71,7 +72,7 @@ class AboutScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showLicensePage(
               context: context,
-              applicationName: 'My Expenses Open',
+              applicationName: 'Tracky',
               applicationVersion: '1.0.0',
             ),
           ),

@@ -74,7 +74,7 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.backup_outlined),
             title: const Text('Backup and restore'),
-            subtitle: const Text('Create or restore a My Expenses backup'),
+            subtitle: const Text('Create or restore a backup'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/backup'),
           ),

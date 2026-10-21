@@ -66,7 +66,7 @@ class BackupService {
     if (_isEncrypted(bytes)) {
       if (password == null || password.isEmpty) {
         throw BackupException(
-          'This backup is encrypted. Enter the password used in My Expenses.',
+          'This backup is encrypted. Enter the password used to create it.',
         );
       }
       bytes = await _decrypt(bytes, password);
@@ -103,7 +103,7 @@ class BackupService {
       final backupFile = File(p.join(workingDir.path, 'BACKUP'));
       if (!await backupFile.exists()) {
         throw BackupException(
-          'This zip does not contain a My Expenses database (BACKUP).',
+          'This zip does not contain a database (BACKUP).',
         );
       }
       final length = await backupFile.length();
@@ -133,7 +133,7 @@ class BackupService {
       if (version < 140) {
         throw BackupException(
           'This backup uses a very old schema (version $version). Please '
-          'restore it once with My Expenses 4.x so it can be upgraded.',
+          'restore it once with a newer compatible app before importing.',
         );
       }
 
@@ -253,7 +253,7 @@ class BackupService {
     final now = DateTime.now();
     final stamp = DateFormat('yyyyMMdd-HHmmss').format(now);
     final encrypted = password != null && password.isNotEmpty;
-    final name = 'myexpenses-backup-$stamp.${encrypted ? 'enc' : 'zip'}';
+    final name = 'tracky-backup-$stamp.${encrypted ? 'enc' : 'zip'}';
     final backupDir = Directory(p.join(database.supportDir.path, 'backups'));
     await backupDir.create(recursive: true);
     final target = File(p.join(backupDir.path, name));
@@ -386,7 +386,7 @@ class BackupService {
     setString('pref_ui_theme', preferences.themeMode.name == 'system'
         ? 'default'
         : preferences.themeMode.name);
-    setString('backup_file_prefix', 'myexpenses-backup');
+    setString('backup_file_prefix', 'tracky-backup');
     setString('export_date_format', 'dd/MM/y');
     setBool('purge_backup', false);
     setBool('auto_backup', false);
