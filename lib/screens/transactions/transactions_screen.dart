@@ -734,19 +734,19 @@ class _TransactionTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isTransfer = transaction.isTransfer;
-    final isIncome = transaction.amount > 0;
     final accountAccent = accountColor == null
         ? null
         : colorFromDb(accountColor);
-    final color = isTransfer
+    final amountColor = isTransfer
         ? theme.colorScheme.tertiary
-        : accountAccent ??
-              (isIncome
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface);
+        : transaction.amount < 0
+        ? theme.colorScheme.error
+        : theme.brightness == Brightness.dark
+        ? const Color(0xFF81C784)
+        : const Color(0xFF2E7D32);
     final categoryColor = isTransfer
         ? theme.colorScheme.tertiary
-        : accountAccent ?? colorFromDb(transaction.categoryColor);
+        : colorFromDb(transaction.categoryColor);
 
     return Dismissible(
       key: ValueKey('tx-${transaction.id}'),
@@ -814,6 +814,7 @@ class _TransactionTile extends ConsumerWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontWeight: FontWeight.w600,
+            color: isTransfer ? null : accountAccent,
             decoration: transaction.isVoid ? TextDecoration.lineThrough : null,
           ),
         ),
@@ -834,7 +835,7 @@ class _TransactionTile extends ConsumerWidget {
             Text(
               formatMoney(transaction.amount, transaction.currency),
               style: theme.textTheme.titleSmall?.copyWith(
-                color: color,
+                color: amountColor,
                 fontWeight: FontWeight.w700,
                 decoration: transaction.isVoid
                     ? TextDecoration.lineThrough
