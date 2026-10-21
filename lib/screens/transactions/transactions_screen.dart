@@ -139,12 +139,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       ),
                     ),
                   _AccountChips(accounts: accounts, selected: filter.accountId),
-                  _PeriodBar(
-                    period: filter.period,
-                    onChanged: (value) => ref
-                        .read(transactionFilterProvider.notifier)
-                        .setPeriod(value),
-                  ),
                   transactions.when(
                     data: (items) => Expanded(
                       child: _TransactionList(
@@ -185,6 +179,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     var payeeId = filter.payeeId;
     var from = filter.from;
     var to = filter.to;
+    var period = filter.period;
     var includeArchived = filter.includeArchived;
 
     await showModalBottomSheet<void>(
@@ -208,6 +203,21 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
+              DropdownButtonFormField<TransactionPeriod>(
+                initialValue: period,
+                decoration: const InputDecoration(
+                  labelText: 'Period',
+                  prefixIcon: Icon(Icons.calendar_month_outlined),
+                ),
+                items: [
+                  for (final value in TransactionPeriod.values)
+                    DropdownMenuItem(value: value, child: Text(value.label)),
+                ],
+                onChanged: (value) {
+                  if (value != null) setModalState(() => period = value);
+                },
+              ),
+              const SizedBox(height: 8),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.category_outlined),
@@ -292,7 +302,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           firstDate: DateTime(2000),
                           lastDate: DateTime(2100),
                         );
-                        if (picked != null) setModalState(() => from = picked);
+                        if (picked != null) {
+                          setModalState(() {
+                            from = picked;
+                            period = TransactionPeriod.custom;
+                          });
+                        }
                       },
                     ),
                   ),
@@ -310,7 +325,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           firstDate: DateTime(2000),
                           lastDate: DateTime(2100),
                         );
-                        if (picked != null) setModalState(() => to = picked);
+                        if (picked != null) {
+                          setModalState(() {
+                            to = picked;
+                            period = TransactionPeriod.custom;
+                          });
+                        }
                       },
                     ),
                   ),
@@ -344,7 +364,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                         );
                         notifier.setCategory(categoryId);
                         notifier.setPayee(payeeId);
-                        notifier.setDates(from, to);
+                        if (period == TransactionPeriod.custom) {
+                          notifier.setDates(from, to);
+                        } else {
+                          notifier.setPeriod(period);
+                        }
                         notifier.setIncludeArchived(includeArchived);
                         Navigator.of(context).pop();
                       },
@@ -488,55 +512,6 @@ class _TransactionList extends ConsumerWidget {
             ),
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 96)),
-        ],
-      ),
-    );
-  }
-}
-
-class _PeriodBar extends StatelessWidget {
-  const _PeriodBar({required this.period, required this.onChanged});
-
-  final TransactionPeriod period;
-  final ValueChanged<TransactionPeriod> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      child: Row(
-        children: [
-          const SizedBox(width: 4),
-          Icon(
-            Icons.calendar_month_outlined,
-            size: 18,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 6),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<TransactionPeriod>(
-              value: period,
-              isDense: true,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
-              items: [
-                for (final value in TransactionPeriod.values)
-                  if (value != TransactionPeriod.custom ||
-                      period == TransactionPeriod.custom)
-                    DropdownMenuItem(
-                      value: value,
-                      enabled: value != TransactionPeriod.custom,
-                      child: Text(value.label),
-                    ),
-              ],
-              onChanged: (value) {
-                if (value != null) onChanged(value);
-              },
-            ),
-          ),
         ],
       ),
     );
