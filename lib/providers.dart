@@ -311,29 +311,6 @@ final periodTotalsProvider = FutureProvider<PeriodTotals>((ref) {
       );
 });
 
-final topCategoryProvider = FutureProvider<CategoryTotal?>((ref) {
-  final filter = ref.watch(transactionFilterProvider);
-  final period = ref.watch(transactionStatsPeriodProvider);
-  final range = ref.watch(transactionStatsRangeProvider);
-  final settings = ref.watch(settingsProvider);
-  final statsFilter = TransactionFilter(
-    accountId: filter.accountId,
-    period: period,
-    from: range?.start,
-    to: range == null
-        ? null
-        : DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59),
-  );
-  return ref
-      .watch(repositoryProvider)
-      .topCategorySpending(
-        accountId: statsFilter.accountId,
-        from: statsFilter.effectiveFrom,
-        to: statsFilter.effectiveTo,
-        homeCurrency: settings.homeCurrency,
-      );
-});
-
 final transactionProvider = FutureProvider.family<Transaction?, int>(
   (ref, id) => ref.watch(repositoryProvider).transaction(id),
 );
@@ -415,7 +392,6 @@ void invalidateTransactionData(WidgetRef ref) {
   ref.invalidate(activeAccountsProvider);
   ref.invalidate(transactionsProvider);
   ref.invalidate(periodTotalsProvider);
-  ref.invalidate(topCategoryProvider);
   ref.invalidate(statsProvider);
   ref.invalidate(budgetsProvider);
   ref.invalidate(debtsProvider);

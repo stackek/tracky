@@ -53,7 +53,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ref.invalidate(categoryTreeProvider);
     ref.invalidate(transactionsProvider);
     ref.invalidate(periodTotalsProvider);
-    ref.invalidate(topCategoryProvider);
     ref.invalidate(statsProvider);
     ref.invalidate(payeesProvider);
     showDialog<void>(

@@ -1235,66 +1235,6 @@ extension TransactionRepository on Repository {
     );
   }
 
-  Future<CategoryTotal?> topCategorySpending({
-    int? accountId,
-    DateTime? from,
-    DateTime? to,
-    required String homeCurrency,
-  }) async {
-    final accountIds = await _statsAccountIds(accountId);
-    if (accountIds.isEmpty) return null;
-    final selectedAccount = accountId == null ? null : await account(accountId);
-    final displayCurrency = selectedAccount?.currency ?? homeCurrency;
-    final rates = accountId == null
-        ? await exchangeRatesTo(homeCurrency)
-        : <String, double>{displayCurrency: 1.0};
-    final rateExpression = accountId != null
-        ? '1.0'
-        : 'CASE a.currency ${rates.entries.map((entry) => "WHEN '${entry.key.replaceAll("'", "''")}' THEN ${entry.value}").join(' ')} ELSE 1.0 END';
-    final args = <Object?>[...accountIds];
-    final conditions = <String>[
-      't.account_id IN (${List.filled(accountIds.length, '?').join(',')})',
-      't.status != $statusVoid',
-      't.status != $statusArchived',
-      "t.cr_status != 'VOID'",
-      't.amount < 0',
-      '(t.cat_id IS NULL OR t.cat_id NOT IN ($splitCategoryId, $transferCategoryId))',
-    ];
-    if (from != null) {
-      conditions.add('t.date >= ?');
-      args.add(toUnixTimestamp(from));
-    }
-    if (to != null) {
-      conditions.add('t.date <= ?');
-      args.add(toUnixTimestamp(to));
-    }
-    final rows = await db.rawQuery('''
-      SELECT COALESCE(c.parent_id, c._id, 0) AS group_id,
-             COALESCE(pc.label, c.label, 'Uncategorized') AS label,
-             COALESCE(pc.icon, c.icon) AS icon,
-             COALESCE(pc.color, c.color) AS color,
-             SUM(CAST(ROUND(-t.amount * $rateExpression) AS INTEGER)) AS amount
-      FROM transactions t
-      JOIN accounts a ON a._id = t.account_id
-      LEFT JOIN categories c ON c._id = t.cat_id
-      LEFT JOIN categories pc ON pc._id = c.parent_id
-      WHERE ${conditions.join(' AND ')}
-      GROUP BY group_id
-      HAVING SUM(-t.amount * $rateExpression) > 0
-      ORDER BY SUM(-t.amount * $rateExpression) DESC
-      LIMIT 1
-    ''', args);
-    if (rows.isEmpty) return null;
-    final row = rows.first;
-    return CategoryTotal(
-      categoryId: asIntOr(row['group_id'], 0),
-      label: asStringOr(row['label'], 'Uncategorized'),
-      icon: asString(row['icon']),
-      color: asInt(row['color']),
-      amount: asIntOr(row['amount'], 0),
-    );
-  }
-
   // ---------------------------------------------------------------- budgets
 
   Future<List<Budget>> budgets() async {

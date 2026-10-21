@@ -60,7 +60,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
     final statsPeriod = ref.watch(transactionStatsPeriodProvider);
     final statsRange = ref.watch(transactionStatsRangeProvider);
     final transactions = ref.watch(transactionsProvider);
-    final topCategory = ref.watch(topCategoryProvider).value;
     final periodTotals = ref.watch(periodTotalsProvider).value;
     final settings = ref.watch(settingsProvider);
     final selectedAccount = filter.accountId == null
@@ -284,7 +283,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                             ? '$periodLabel • $currency'
                             : periodLabel,
                         periodTotals: periodTotals,
-                        topCategory: topCategory,
                         selectedIds: _selectedIds,
                         onSelectPeriod: () => _showStatsPeriodSheet(context),
                         onToggleSelection: (id) => setState(() {
@@ -1329,7 +1327,6 @@ class _TransactionList extends ConsumerWidget {
     required this.currency,
     required this.periodLabel,
     required this.periodTotals,
-    required this.topCategory,
     required this.selectedIds,
     required this.onSelectPeriod,
     required this.onToggleSelection,
@@ -1340,7 +1337,6 @@ class _TransactionList extends ConsumerWidget {
   final String currency;
   final String periodLabel;
   final PeriodTotals? periodTotals;
-  final CategoryTotal? topCategory;
   final Set<int> selectedIds;
   final VoidCallback onSelectPeriod;
   final ValueChanged<int> onToggleSelection;
@@ -1394,13 +1390,6 @@ class _TransactionList extends ConsumerWidget {
                     periodLabel: periodLabel,
                     onSelectPeriod: onSelectPeriod,
                   ),
-                  if (topCategory != null) ...[
-                    const SizedBox(height: 10),
-                    _TopCategoryCard(
-                      category: topCategory!,
-                      currency: currency,
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -1422,65 +1411,6 @@ class _TransactionList extends ConsumerWidget {
             ),
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 96)),
-        ],
-      ),
-    );
-  }
-}
-
-class _TopCategoryCard extends StatelessWidget {
-  const _TopCategoryCard({required this.category, required this.currency});
-
-  final CategoryTotal category;
-  final String currency;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = colorFromDb(category.color);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: color.withValues(alpha: 0.18),
-            child: Icon(iconForCategory(category.icon), color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Top spending category',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  category.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            formatMoney(category.amount, currency),
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: theme.colorScheme.error,
-            ),
-          ),
         ],
       ),
     );
