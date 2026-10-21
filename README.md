@@ -1,3 +1,7 @@
+<div align="center">
+<img src="./assets/icon/logo.png" width="20%" alt="Tracky icon" />
+</div>
+
 # Tracky
 
 A free, open source, privacy-first expense tracker for Android, written in
@@ -81,18 +85,6 @@ development shell.
 - Repository layer in `lib/data/`, domain models in `lib/models/`, screens in
   `lib/screens/`.
 - No network calls, no third-party SDKs, no telemetry.
-
-## Status
-
-Implemented: accounts, transactions, transfers, splits, categories, payees,
-payment methods, tags, attachments, filters, statistics, budgets, templates,
-CSV, backup/restore, multiple currencies and themes.
-
-Not implemented (yet): bank sync (WebDAV/Dropbox/Google Drive/OneDrive),
-FinTS/HBCI, home screen widgets, OCR, calendar-based recurring plan execution,
-QIF, automatic exchange-rate downloads, and full multi-currency conversion in
-aggregate statistics. Backups containing this data are still restored and
-exported without losing it.
 
 ## Licence
 
