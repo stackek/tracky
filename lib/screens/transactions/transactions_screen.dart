@@ -28,6 +28,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
   bool _keyboardWasVisible = false;
   final Set<int> _selectedIds = {};
   bool get _selectionMode => _selectedIds.isNotEmpty;
+  List<Account>? _reorderAccounts;
+  bool get _reorderMode => _reorderAccounts != null;
 
   @override
   void initState() {
@@ -100,10 +102,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
         : statsPeriod.label;
 
     return PopScope(
-      canPop: !_showSearch && !_selectionMode,
-      onPopInvokedWithResult: (didPop, result) {
+      canPop: !_showSearch && !_selectionMode && !_reorderMode,
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        if (_showSearch) {
+        if (_reorderMode) {
+          await _confirmDiscardReorder();
+        } else if (_showSearch) {
           _closeSearch();
         } else if (_selectionMode) {
           setState(_selectedIds.clear);
@@ -217,7 +221,13 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                 ),
               ],
       ),
-      floatingActionButton: accounts.isEmpty || _selectionMode
+      floatingActionButton: _reorderMode
+          ? FloatingActionButton.extended(
+              onPressed: _saveAccountOrder,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Save'),
+            )
+          : accounts.isEmpty || _selectionMode
           ? null
           : FloatingActionButton.extended(
               onPressed: () {
@@ -239,22 +249,24 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
             )
           : GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onHorizontalDragEnd: (details) {
-                final velocity = details.primaryVelocity ?? 0;
-                if (velocity.abs() < 250) return;
-                final ids = <int?>[null, ...accounts.map((a) => a.id)];
-                final current = ids.indexOf(filter.accountId);
-                if (current < 0) return;
-                final next = (current + (velocity < 0 ? 1 : -1)).clamp(
-                  0,
-                  ids.length - 1,
-                );
-                if (next != current) {
-                  ref
-                      .read(transactionFilterProvider.notifier)
-                      .setAccount(ids[next]);
-                }
-              },
+              onHorizontalDragEnd: _reorderMode
+                  ? null
+                  : (details) {
+                      final velocity = details.primaryVelocity ?? 0;
+                      if (velocity.abs() < 250) return;
+                      final ids = <int?>[null, ...accounts.map((a) => a.id)];
+                      final current = ids.indexOf(filter.accountId);
+                      if (current < 0) return;
+                      final next = (current + (velocity < 0 ? 1 : -1)).clamp(
+                        0,
+                        ids.length - 1,
+                      );
+                      if (next != current) {
+                        ref
+                            .read(transactionFilterProvider.notifier)
+                            .setAccount(ids[next]);
+                      }
+                    },
               child: Column(
                 children: [
                   if (_showSearch)
@@ -273,7 +285,20 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                             .setSearch,
                       ),
                     ),
-                  _AccountChips(accounts: accounts, selected: filter.accountId),
+                  if (_reorderMode)
+                    _AccountReorderChips(
+                      accounts: _reorderAccounts!,
+                      onReorder: _onReorderAccount,
+                    )
+                  else
+                    _AccountChips(
+                      accounts: accounts,
+                      selected: filter.accountId,
+                      onStartReorder: () => _startAccountReorder(accounts),
+                      onEditAccount: (account) => context.push(
+                        '/account/edit?id=${account.id}',
+                      ),
+                    ),
                   transactions.when(
                     data: (items) => Expanded(
                       child: _TransactionList(
@@ -318,6 +343,62 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
     _searchController.clear();
     _searchFocus.unfocus();
     ref.read(transactionFilterProvider.notifier).setSearch('');
+  }
+
+  void _startAccountReorder(List<Account> accounts) {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _selectedIds.clear();
+      _reorderAccounts = List<Account>.from(accounts);
+    });
+  }
+
+  void _onReorderAccount(int oldIndex, int newIndex) {
+    final accounts = _reorderAccounts;
+    if (accounts == null) return;
+    setState(() {
+      final account = accounts.removeAt(oldIndex);
+      accounts.insert(newIndex, account);
+    });
+  }
+
+  Future<void> _saveAccountOrder() async {
+    final accounts = _reorderAccounts;
+    if (accounts == null) return;
+    await ref
+        .read(repositoryProvider)
+        .reorderAccounts(accounts.map((account) => account.id).toList());
+    if (!mounted) return;
+    ref.invalidate(accountsProvider);
+    ref.invalidate(activeAccountsProvider);
+    setState(() => _reorderAccounts = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Account order saved')),
+    );
+  }
+
+  Future<void> _confirmDiscardReorder() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard account order?'),
+        content: const Text('Your changes to the account order will be lost.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      ref.invalidate(accountsProvider);
+      setState(() => _reorderAccounts = null);
+    }
   }
 
   Future<void> _deleteSelected() async {
@@ -1282,10 +1363,17 @@ class _FundsRow extends StatelessWidget {
 }
 
 class _AccountChips extends ConsumerWidget {
-  const _AccountChips({required this.accounts, required this.selected});
+  const _AccountChips({
+    required this.accounts,
+    required this.selected,
+    required this.onStartReorder,
+    required this.onEditAccount,
+  });
 
   final List<Account> accounts;
   final int? selected;
+  final VoidCallback onStartReorder;
+  final ValueChanged<Account> onEditAccount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1297,26 +1385,78 @@ class _AccountChips extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: const Text('All'),
-              selected: selected == null,
-              onSelected: (_) =>
-                  ref.read(transactionFilterProvider.notifier).setAccount(null),
+            child: GestureDetector(
+              onLongPress: onStartReorder,
+              child: ChoiceChip(
+                label: const Text('All'),
+                selected: selected == null,
+                onSelected: (_) => ref
+                    .read(transactionFilterProvider.notifier)
+                    .setAccount(null),
+              ),
             ),
           ),
           for (final account in accounts)
             Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                avatar: Icon(iconForAccountType(account.type), size: 18),
-                label: Text(account.label),
-                selected: selected == account.id,
-                onSelected: (_) => ref
-                    .read(transactionFilterProvider.notifier)
-                    .setAccount(account.id),
+              child: GestureDetector(
+                onLongPress: () => onEditAccount(account),
+                child: ChoiceChip(
+                  avatar: Icon(iconForAccountType(account.type), size: 18),
+                  label: Text(account.label),
+                  selected: selected == account.id,
+                  onSelected: (_) => ref
+                      .read(transactionFilterProvider.notifier)
+                      .setAccount(account.id),
+                ),
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _AccountReorderChips extends StatelessWidget {
+  const _AccountReorderChips({
+    required this.accounts,
+    required this.onReorder,
+  });
+
+  final List<Account> accounts;
+  final ReorderCallback onReorder;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: ReorderableListView.builder(
+        scrollDirection: Axis.horizontal,
+        buildDefaultDragHandles: false,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: accounts.length,
+        onReorderItem: onReorder,
+        itemBuilder: (context, index) {
+          final account = accounts[index];
+          return Padding(
+            key: ValueKey(account.id),
+            padding: const EdgeInsets.only(right: 8),
+            child: ReorderableDelayedDragStartListener(
+              index: index,
+              child: Chip(
+                avatar: Icon(iconForAccountType(account.type), size: 18),
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(account.label),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.drag_indicator, size: 16),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

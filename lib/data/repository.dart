@@ -97,6 +97,19 @@ class Repository {
   Future<List<Account>> activeAccounts() async =>
       (await accounts()).where((account) => !account.isArchived).toList();
 
+  Future<void> reorderAccounts(List<int> ids) async {
+    final batch = db.batch();
+    for (var index = 0; index < ids.length; index++) {
+      batch.update(
+        'accounts',
+        {'sort_key': index},
+        where: '_id = ?',
+        whereArgs: [ids[index]],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<List<AccountType>> accountTypes() async {
     final rows = await db.rawQuery(
       'SELECT _id, label, type_sort_key, isAsset, supportsReconciliation '
