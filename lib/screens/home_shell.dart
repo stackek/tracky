@@ -25,9 +25,9 @@ class HomeShell extends StatelessWidget {
             label: 'Transactions',
           ),
           NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet),
-            label: 'Accounts',
+            icon: Icon(Icons.savings_outlined),
+            selectedIcon: Icon(Icons.savings),
+            label: 'Budgets',
           ),
           NavigationDestination(
             icon: Icon(Icons.insights_outlined),

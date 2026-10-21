@@ -26,6 +26,12 @@ class MoreScreen extends ConsumerWidget {
             title: 'Organise',
             children: [
               _Tile(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'Accounts',
+                subtitle: 'Cash, bank and credit card accounts',
+                onTap: () => context.push('/accounts'),
+              ),
+              _Tile(
                 icon: Icons.category_outlined,
                 title: 'Categories',
                 subtitle: 'Expense and income categories',
@@ -53,17 +59,6 @@ class MoreScreen extends ConsumerWidget {
                 title: 'Debts',
                 subtitle: 'What payees owe you or you owe them',
                 onTap: () => context.push('/debts'),
-              ),
-            ],
-          ),
-          _Group(
-            title: 'Plan',
-            children: [
-              _Tile(
-                icon: Icons.savings_outlined,
-                title: 'Budgets',
-                subtitle: 'Set monthly limits per category',
-                onTap: () => context.push('/budgets'),
               ),
             ],
           ),

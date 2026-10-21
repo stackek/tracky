@@ -50,8 +50,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/accounts',
-                builder: (context, state) => const AccountsScreen(),
+                path: '/budgets',
+                builder: (context, state) => const BudgetsScreen(),
               ),
             ],
           ),
@@ -119,8 +119,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const DebtsScreen(),
       ),
       GoRoute(
-        path: '/budgets',
-        builder: (context, state) => const BudgetsScreen(),
+        path: '/accounts',
+        builder: (context, state) => const AccountsScreen(),
       ),
       GoRoute(
         path: '/budget',
