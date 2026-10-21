@@ -130,7 +130,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       ),
                     ),
                   _AccountChips(accounts: accounts, selected: filter.accountId),
-                  _PeriodBar(period: filter.period, onChanged: _selectPeriod),
+                  _PeriodBar(
+                    period: filter.period,
+                    onChanged: (value) => ref
+                        .read(transactionFilterProvider.notifier)
+                        .setPeriod(value),
+                  ),
                   transactions.when(
                     data: (items) => Expanded(
                       child: _TransactionList(
@@ -161,30 +166,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               ),
             ),
     );
-  }
-
-  Future<void> _selectPeriod(TransactionPeriod period) async {
-    final notifier = ref.read(transactionFilterProvider.notifier);
-    if (period != TransactionPeriod.custom) {
-      notifier.setPeriod(period);
-      return;
-    }
-    final now = DateTime.now();
-    final filter = ref.read(transactionFilterProvider);
-    final initial = filter.from != null && filter.to != null
-        ? DateTimeRange(start: filter.from!, end: filter.to!)
-        : DateTimeRange(
-            start: DateTime(now.year, now.month - 1, 1),
-            end: DateTime(now.year, now.month, 0),
-          );
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2000),
-      lastDate: now,
-      initialDateRange: initial,
-      helpText: 'Select period',
-    );
-    if (range != null) notifier.setDates(range.start, range.end);
   }
 
   Future<void> _showFilterSheet(BuildContext context) async {
@@ -534,14 +515,13 @@ class _PeriodBar extends StatelessWidget {
               ),
               items: [
                 for (final value in TransactionPeriod.values)
-                  DropdownMenuItem(
-                    value: value,
-                    child: Text(
-                      value == TransactionPeriod.custom
-                          ? 'Custom range…'
-                          : value.label,
+                  if (value != TransactionPeriod.custom ||
+                      period == TransactionPeriod.custom)
+                    DropdownMenuItem(
+                      value: value,
+                      enabled: value != TransactionPeriod.custom,
+                      child: Text(value.label),
                     ),
-                  ),
               ],
               onChanged: (value) {
                 if (value != null) onChanged(value);
