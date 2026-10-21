@@ -170,6 +170,22 @@ class _TransactionEditorScreenState
             .where((account) => account.id != _accountId)
             .firstOrNull
             ?.id;
+      } else if (_accountId != null) {
+        final previous = await repo.lastTransactionForAccount(_accountId!);
+        final payeeId = previous?.payeeId;
+        if (payeeId != null) {
+          _payeeId = payeeId;
+          final lastForPayee = await repo.lastTransactionForPayee(payeeId);
+          final categoryId = lastForPayee?.catId;
+          if (categoryId != null) {
+            final category = await repo.category(categoryId);
+            final expected = _type == DraftType.income ? 2 : 1;
+            if (category != null &&
+                (category.type == expected || category.type == 0)) {
+              _categoryId = categoryId;
+            }
+          }
+        }
       }
       _amountController.text = '';
     }

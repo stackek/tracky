@@ -147,6 +147,20 @@ extension TransactionRepository on Repository {
     return rows.map(Transaction.fromMap).toList();
   }
 
+  Future<Transaction?> lastTransactionForAccount(int accountId) async {
+    final list = await transactions(
+      TransactionFilter(accountId: accountId, period: TransactionPeriod.all),
+    );
+    for (final transaction in list) {
+      if (!transaction.isSplit &&
+          !transaction.isTransfer &&
+          transaction.payeeId != null) {
+        return transaction;
+      }
+    }
+    return null;
+  }
+
   Future<Transaction?> lastTransactionForPayee(int payeeId) async {
     final list = await transactions(
       TransactionFilter(payeeId: payeeId, period: TransactionPeriod.all),
