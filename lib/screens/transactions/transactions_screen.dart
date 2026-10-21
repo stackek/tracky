@@ -40,7 +40,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final currency = selectedAccount?.currency ?? settings.homeCurrency;
     final periodLabel = filter.period == TransactionPeriod.custom
         ? '${filter.from == null ? '' : formatShortDate(filter.from!)}'
-            '${filter.to == null ? '' : ' – ${formatShortDate(filter.to!)}'}'
+              '${filter.to == null ? '' : ' – ${formatShortDate(filter.to!)}'}'
         : filter.period.label;
 
     return Scaffold(
@@ -61,7 +61,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           IconButton(
             tooltip: 'Filter',
             icon: Badge(
-              isLabelVisible: filter.categoryId != null ||
+              isLabelVisible:
+                  filter.categoryId != null ||
                   filter.payeeId != null ||
                   filter.from != null ||
                   filter.includeArchived,
@@ -91,55 +92,71 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               actionLabel: 'Add account',
               onAction: () => context.push('/account/edit'),
             )
-          : Column(
-              children: [
-                if (_showSearch)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                    child: TextField(
-                      controller: _searchController,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText: 'Search transactions',
-                        prefixIcon: Icon(Icons.search),
-                      ),
-                      onChanged: ref
-                          .read(transactionFilterProvider.notifier)
-                          .setSearch,
-                    ),
-                  ),
-                _AccountChips(accounts: accounts, selected: filter.accountId),
-                _PeriodBar(
-                  period: filter.period,
-                  onChanged: _selectPeriod,
-                ),
-                transactions.when(
-                  data: (items) => Expanded(
-                    child: _TransactionList(
-                      items: items,
-                      currency: periodTotals?.currency ?? currency,
-                      periodLabel: filter.accountId == null
-                          ? '$periodLabel • $currency'
-                          : periodLabel,
-                      periodTotals: periodTotals,
-                      topCategory: topCategory,
-                      onRefresh: () async =>
-                          ref.invalidate(transactionsProvider),
-                    ),
-                  ),
-                  loading: () => const Expanded(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (error, stack) => Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text('Could not load transactions:\n$error'),
+          : GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: (details) {
+                final velocity = details.primaryVelocity ?? 0;
+                if (velocity.abs() < 250) return;
+                final ids = <int?>[null, ...accounts.map((a) => a.id)];
+                final current = ids.indexOf(filter.accountId);
+                if (current < 0) return;
+                final next = (current + (velocity < 0 ? 1 : -1)).clamp(
+                  0,
+                  ids.length - 1,
+                );
+                if (next != current) {
+                  ref
+                      .read(transactionFilterProvider.notifier)
+                      .setAccount(ids[next]);
+                }
+              },
+              child: Column(
+                children: [
+                  if (_showSearch)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      child: TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Search transactions',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: ref
+                            .read(transactionFilterProvider.notifier)
+                            .setSearch,
                       ),
                     ),
+                  _AccountChips(accounts: accounts, selected: filter.accountId),
+                  _PeriodBar(period: filter.period, onChanged: _selectPeriod),
+                  transactions.when(
+                    data: (items) => Expanded(
+                      child: _TransactionList(
+                        items: items,
+                        currency: periodTotals?.currency ?? currency,
+                        periodLabel: filter.accountId == null
+                            ? '$periodLabel • $currency'
+                            : periodLabel,
+                        periodTotals: periodTotals,
+                        topCategory: topCategory,
+                        onRefresh: () async =>
+                            ref.invalidate(transactionsProvider),
+                      ),
+                    ),
+                    loading: () => const Expanded(
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (error, stack) => Expanded(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text('Could not load transactions:\n$error'),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
@@ -204,7 +221,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('Any category')),
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text('Any category'),
+                  ),
                   ...categories.map(
                     (category) => DropdownMenuItem(
                       value: category.id,
@@ -236,7 +256,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.event),
-                      label: Text(from == null ? 'From date' : formatShortDate(from!)),
+                      label: Text(
+                        from == null ? 'From date' : formatShortDate(from!),
+                      ),
                       onPressed: () async {
                         final picked = await showDatePicker(
                           context: context,
@@ -252,7 +274,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.event_available),
-                      label: Text(to == null ? 'To date' : formatShortDate(to!)),
+                      label: Text(
+                        to == null ? 'To date' : formatShortDate(to!),
+                      ),
                       onPressed: () async {
                         final picked = await showDatePicker(
                           context: context,
@@ -289,8 +313,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   Expanded(
                     child: FilledButton(
                       onPressed: () {
-                        final notifier =
-                            ref.read(transactionFilterProvider.notifier);
+                        final notifier = ref.read(
+                          transactionFilterProvider.notifier,
+                        );
                         notifier.setCategory(categoryId);
                         notifier.setPayee(payeeId);
                         notifier.setDates(from, to);
@@ -337,10 +362,7 @@ class _AccountChips extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
-                avatar: Icon(
-                  iconForAccountType(account.type),
-                  size: 18,
-                ),
+                avatar: Icon(iconForAccountType(account.type), size: 18),
                 label: Text(account.label),
                 selected: selected == account.id,
                 onSelected: (_) => ref
@@ -447,10 +469,7 @@ class _TransactionList extends ConsumerWidget {
 }
 
 class _PeriodBar extends StatelessWidget {
-  const _PeriodBar({
-    required this.period,
-    required this.onChanged,
-  });
+  const _PeriodBar({required this.period, required this.onChanged});
 
   final TransactionPeriod period;
   final ValueChanged<TransactionPeriod> onChanged;
@@ -593,28 +612,28 @@ class _SummaryStrip extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-          Expanded(
-            child: _SummaryItem(
-              label: 'Income',
-              value: formatMoney(income, currency),
-              color: theme.colorScheme.primary,
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 34,
-            color: theme.colorScheme.outlineVariant,
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16),
-              child: _SummaryItem(
-                label: 'Expenses',
-                value: formatMoney(expense, currency),
-                color: theme.colorScheme.error,
+              Expanded(
+                child: _SummaryItem(
+                  label: 'Income',
+                  value: formatMoney(income, currency),
+                  color: theme.colorScheme.primary,
+                ),
               ),
-            ),
-          ),
+              Container(
+                width: 1,
+                height: 34,
+                color: theme.colorScheme.outlineVariant,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: _SummaryItem(
+                    label: 'Expenses',
+                    value: formatMoney(expense, currency),
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -691,16 +710,18 @@ class _TransactionTile extends ConsumerWidget {
     final theme = Theme.of(context);
     final isTransfer = transaction.isTransfer;
     final isIncome = transaction.amount > 0;
-    final accountAccent =
-        accountColor == null ? null : colorFromDb(accountColor);
+    final accountAccent = accountColor == null
+        ? null
+        : colorFromDb(accountColor);
     final color = isTransfer
         ? theme.colorScheme.tertiary
         : accountAccent ??
-            (isIncome
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface);
-    final categoryColor =
-        isTransfer ? theme.colorScheme.tertiary : accountAccent ?? colorFromDb(transaction.categoryColor);
+              (isIncome
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface);
+    final categoryColor = isTransfer
+        ? theme.colorScheme.tertiary
+        : accountAccent ?? colorFromDb(transaction.categoryColor);
 
     return Dismissible(
       key: ValueKey('tx-${transaction.id}'),
@@ -741,9 +762,9 @@ class _TransactionTile extends ConsumerWidget {
           invalidateTransactionData(ref);
         } catch (error) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Could not delete: $error')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Could not delete: $error')));
           }
         }
       },
