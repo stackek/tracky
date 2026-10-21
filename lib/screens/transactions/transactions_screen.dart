@@ -196,6 +196,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
             },
           ),
                 IconButton(
+                  tooltip: 'Templates',
+                  icon: const Icon(Icons.repeat_outlined),
+                  onPressed: () => context.push('/templates'),
+                ),
+                IconButton(
                   tooltip: 'Filter',
                   icon: Badge(
                     isLabelVisible:

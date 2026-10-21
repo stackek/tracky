@@ -65,12 +65,6 @@ class MoreScreen extends ConsumerWidget {
                 subtitle: 'Set monthly limits per category',
                 onTap: () => context.push('/budgets'),
               ),
-              _Tile(
-                icon: Icons.repeat_outlined,
-                title: 'Templates',
-                subtitle: 'Reuse frequent transactions',
-                onTap: () => context.push('/templates'),
-              ),
             ],
           ),
           _Group(
