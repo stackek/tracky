@@ -83,8 +83,8 @@ class _TransactionEditorScreenState
         _type = existing.isTransfer
             ? DraftType.transfer
             : existing.amount >= 0
-                ? DraftType.income
-                : DraftType.expense;
+            ? DraftType.income
+            : DraftType.expense;
         _splitMode = existing.isSplit;
         var displayAmount = existing.amount.abs();
         _commentController.text = existing.comment;
@@ -97,9 +97,7 @@ class _TransactionEditorScreenState
         _valueDate = existing.valueDate;
         _crStatus = existing.crStatus;
         _tagIds.addAll(existing.tagIds);
-        _attachments.addAll(
-          await repo.attachmentsForTransaction(existing.id),
-        );
+        _attachments.addAll(await repo.attachmentsForTransaction(existing.id));
         if (existing.isTransfer) {
           final peerId = existing.transferPeer;
           final peer = peerId == null ? null : await repo.transaction(peerId);
@@ -114,12 +112,14 @@ class _TransactionEditorScreenState
           if (existing.amount > 0 && peer != null) {
             displayAmount = peer.amount.abs();
           }
-          final sourceCurrency = accounts
+          final sourceCurrency =
+              accounts
                   .where((account) => account.id == sourceAccount)
                   .firstOrNull
                   ?.currency ??
               existing.currency;
-          final targetCurrency = accounts
+          final targetCurrency =
+              accounts
                   .where((account) => account.id == targetAccount)
                   .firstOrNull
                   ?.currency ??
@@ -128,13 +128,19 @@ class _TransactionEditorScreenState
           final targetAmount = existing.amount > 0
               ? existing.amount.abs()
               : (peer?.amount.abs() ?? existing.amount.abs());
-          _targetAmountController.text =
-              formatMoneyPlain(targetAmount, targetCurrency);
-          _amountController.text =
-              formatMoneyPlain(displayAmount, sourceCurrency);
+          _targetAmountController.text = formatMoneyPlain(
+            targetAmount,
+            targetCurrency,
+          );
+          _amountController.text = formatMoneyPlain(
+            displayAmount,
+            sourceCurrency,
+          );
         } else {
-          _amountController.text =
-              formatMoneyPlain(displayAmount, existing.currency);
+          _amountController.text = formatMoneyPlain(
+            displayAmount,
+            existing.currency,
+          );
         }
         if (existing.isSplit) {
           final children = await repo.children(existing.id);
@@ -195,17 +201,18 @@ class _TransactionEditorScreenState
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final accounts = ref.watch(activeAccountsProvider).value ?? const <Account>[];
-    final categories = ref.watch(categoriesProvider).value ?? const <Category>[];
+    final accounts =
+        ref.watch(activeAccountsProvider).value ?? const <Account>[];
+    final categories =
+        ref.watch(categoriesProvider).value ?? const <Category>[];
     final payees = ref.watch(payeesProvider).value ?? const <Payee>[];
     final methods =
         ref.watch(paymentMethodsProvider).value ?? const <PaymentMethod>[];
     final tags = ref.watch(tagsProvider).value ?? const <Tag>[];
     final source = accounts.where((a) => a.id == _accountId).firstOrNull;
     final target = accounts.where((a) => a.id == _targetAccountId).firstOrNull;
-    final sameCurrency = source != null &&
-        target != null &&
-        source.currency == target.currency;
+    final sameCurrency =
+        source != null && target != null && source.currency == target.currency;
     final category = categories.where((c) => c.id == _categoryId).firstOrNull;
 
     return Scaffold(
@@ -285,8 +292,8 @@ class _TransactionEditorScreenState
             label: _splitMode
                 ? 'Split total'
                 : _type == DraftType.transfer
-                    ? 'Transfer amount'
-                    : 'Amount',
+                ? 'Transfer amount'
+                : 'Amount',
             readOnly: _splitMode,
             negative: _type == DraftType.expense,
             onChanged: (_) => setState(() {}),
@@ -318,10 +325,12 @@ class _TransactionEditorScreenState
                 label: 'Account',
                 value: _accountId,
                 items: accounts
-                    .map((account) => DropdownMenuItem(
-                          value: account.id,
-                          child: Text('${account.label} (${account.currency})'),
-                        ))
+                    .map(
+                      (account) => DropdownMenuItem(
+                        value: account.id,
+                        child: Text('${account.label} (${account.currency})'),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) => setState(() {
                   _accountId = value;
@@ -340,10 +349,12 @@ class _TransactionEditorScreenState
                   value: _targetAccountId,
                   items: accounts
                       .where((account) => account.id != _accountId)
-                      .map((account) => DropdownMenuItem(
-                            value: account.id,
-                            child: Text('${account.label} (${account.currency})'),
-                          ))
+                      .map(
+                        (account) => DropdownMenuItem(
+                          value: account.id,
+                          child: Text('${account.label} (${account.currency})'),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) => setState(() {
                     _targetAccountId = value;
@@ -355,8 +366,9 @@ class _TransactionEditorScreenState
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                   child: TextField(
                     controller: _targetAmountController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                     ],
@@ -409,12 +421,14 @@ class _TransactionEditorScreenState
                           _amountController.text,
                           _currency,
                         );
-                        _parts.add(SplitDraft(
-                          categoryId: _categoryId,
-                          amount: _type == DraftType.income
-                              ? (parsed ?? 0)
-                              : -(parsed ?? 0),
-                        ));
+                        _parts.add(
+                          SplitDraft(
+                            categoryId: _categoryId,
+                            amount: _type == DraftType.income
+                                ? (parsed ?? 0)
+                                : -(parsed ?? 0),
+                          ),
+                        );
                       }
                       _updateSplitTotal();
                     });
@@ -432,10 +446,12 @@ class _TransactionEditorScreenState
                   value: _payeeId,
                   items: [
                     const DropdownMenuItem(value: null, child: Text('None')),
-                    ...payees.map((payee) => DropdownMenuItem(
-                          value: payee.id,
-                          child: Text(payee.name),
-                        )),
+                    ...payees.map(
+                      (payee) => DropdownMenuItem(
+                        value: payee.id,
+                        child: Text(payee.name),
+                      ),
+                    ),
                   ],
                   onChanged: (value) => setState(() => _payeeId = value),
                   trailingAction: IconButton(
@@ -450,10 +466,12 @@ class _TransactionEditorScreenState
                   value: _methodId,
                   items: [
                     const DropdownMenuItem(value: null, child: Text('None')),
-                    ...methods.map((method) => DropdownMenuItem(
-                          value: method.id,
-                          child: Text(method.displayName),
-                        )),
+                    ...methods.map(
+                      (method) => DropdownMenuItem(
+                        value: method.id,
+                        child: Text(method.displayName),
+                      ),
+                    ),
                   ],
                   onChanged: (value) => setState(() => _methodId = value),
                 ),
@@ -470,9 +488,9 @@ class _TransactionEditorScreenState
                   _tagIds.isEmpty
                       ? 'None'
                       : tags
-                          .where((tag) => _tagIds.contains(tag.id))
-                          .map((tag) => tag.label)
-                          .join(', '),
+                            .where((tag) => _tagIds.contains(tag.id))
+                            .map((tag) => tag.label)
+                            .join(', '),
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _pickTags(tags),
@@ -598,9 +616,9 @@ class _TransactionEditorScreenState
   Future<void> _pickCategory() async {
     final categories = ref.read(categoriesProvider).value ?? const <Category>[];
     if (categories.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Create a category first.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Create a category first.')));
       return;
     }
     final type = _type == DraftType.income ? 2 : 1;
@@ -640,12 +658,15 @@ class _TransactionEditorScreenState
       text: initial == null
           ? ''
           : formatMoneyPlain(initial.amount.abs(), _currency) +
-              (initial.amount < 0 ? '' : ''),
+                (initial.amount < 0 ? '' : ''),
     );
-    final commentController =
-        TextEditingController(text: initial?.comment ?? '');
+    final commentController = TextEditingController(
+      text: initial?.comment ?? '',
+    );
     var selectedCategory = initial?.categoryId;
-    var expense = initial == null ? _type == DraftType.expense : initial.amount < 0;
+    var expense = initial == null
+        ? _type == DraftType.expense
+        : initial.amount < 0;
     final result = await showDialog<SplitDraft>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -667,7 +688,9 @@ class _TransactionEditorScreenState
                 const SizedBox(height: 12),
                 TextField(
                   controller: amountController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                   ],
@@ -682,15 +705,22 @@ class _TransactionEditorScreenState
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Category'),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('No category')),
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('No category'),
+                    ),
                     ...categories
-                        .where((category) =>
-                            category.type == (expense ? 1 : 2) ||
-                            category.type == 0)
-                        .map((category) => DropdownMenuItem(
-                              value: category.id,
-                              child: Text(category.displayPath),
-                            )),
+                        .where(
+                          (category) =>
+                              category.type == (expense ? 1 : 2) ||
+                              category.type == 0,
+                        )
+                        .map(
+                          (category) => DropdownMenuItem(
+                            value: category.id,
+                            child: Text(category.displayPath),
+                          ),
+                        ),
                   ],
                   onChanged: (value) =>
                       setDialogState(() => selectedCategory = value),
@@ -710,8 +740,10 @@ class _TransactionEditorScreenState
             ),
             FilledButton(
               onPressed: () {
-                final parsed =
-                    parseAmountToMinor(amountController.text, _currency);
+                final parsed = parseAmountToMinor(
+                  amountController.text,
+                  _currency,
+                );
                 if (parsed == null || parsed == 0) return;
                 Navigator.of(context).pop(
                   SplitDraft(
@@ -791,8 +823,9 @@ class _TransactionEditorScreenState
                             content: TextField(
                               controller: controller,
                               autofocus: true,
-                              decoration:
-                                  const InputDecoration(labelText: 'Name'),
+                              decoration: const InputDecoration(
+                                labelText: 'Name',
+                              ),
                               onSubmitted: (value) =>
                                   Navigator.of(context).pop(value),
                             ),
@@ -895,7 +928,9 @@ class _TransactionEditorScreenState
     if (source == ImageSource.gallery) {
       final files = await picker.pickMultiImage(imageQuality: 90);
       if (files.isNotEmpty) {
-        setState(() => _newAttachments.addAll(files.map((file) => File(file.path))));
+        setState(
+          () => _newAttachments.addAll(files.map((file) => File(file.path))),
+        );
       }
     } else {
       final file = await picker.pickImage(source: source, imageQuality: 90);
@@ -929,10 +964,15 @@ class _TransactionEditorScreenState
     }
     int? targetAmount;
     if (_type == DraftType.transfer) {
-      final accounts = ref.read(activeAccountsProvider).value ?? const <Account>[];
+      final accounts =
+          ref.read(activeAccountsProvider).value ?? const <Account>[];
       final source = accounts.where((a) => a.id == _accountId).firstOrNull;
-      final target = accounts.where((a) => a.id == _targetAccountId).firstOrNull;
-      if (source != null && target != null && source.currency != target.currency) {
+      final target = accounts
+          .where((a) => a.id == _targetAccountId)
+          .firstOrNull;
+      if (source != null &&
+          target != null &&
+          source.currency != target.currency) {
         final targetParsed = parseAmountToMinor(
           _targetAmountController.text,
           target.currency,
@@ -1055,7 +1095,9 @@ class _AmountCard extends StatelessWidget {
             ],
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w700,
-              color: negative ? theme.colorScheme.error : theme.colorScheme.primary,
+              color: negative
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.primary,
             ),
             decoration: InputDecoration(
               isDense: true,
@@ -1131,7 +1173,7 @@ class _DropdownTile<T> extends StatelessWidget {
               onChanged: onChanged,
             ),
           ),
-          if (trailingAction != null) trailingAction!,
+          ?trailingAction,
         ],
       ),
     );
@@ -1164,35 +1206,38 @@ class _SplitSection extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < parts.length; i++)
-            Builder(builder: (context) {
-              final part = parts[i];
-              final category =
-                  categories.where((c) => c.id == part.categoryId).firstOrNull;
-              return ListTile(
-                leading: Icon(
-                  iconForCategory(category?.icon),
-                  color: part.amount < 0
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary,
-                ),
-                title: Text(category?.displayPath ?? 'No category'),
-                subtitle: part.comment.isEmpty ? null : Text(part.comment),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      formatMoney(part.amount, currency),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => onDelete(i),
-                    ),
-                  ],
-                ),
-                onTap: () => onEdit(i),
-              );
-            }),
+            Builder(
+              builder: (context) {
+                final part = parts[i];
+                final category = categories
+                    .where((c) => c.id == part.categoryId)
+                    .firstOrNull;
+                return ListTile(
+                  leading: Icon(
+                    iconForCategory(category?.icon),
+                    color: part.amount < 0
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(category?.displayPath ?? 'No category'),
+                  subtitle: part.comment.isEmpty ? null : Text(part.comment),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        formatMoney(part.amount, currency),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => onDelete(i),
+                      ),
+                    ],
+                  ),
+                  onTap: () => onEdit(i),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Row(
@@ -1300,7 +1345,9 @@ class _AttachmentThumb extends StatelessWidget {
             child: file.existsSync()
                 ? Image.file(file, fit: BoxFit.cover)
                 : ColoredBox(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     child: const Icon(Icons.insert_drive_file_outlined),
                   ),
           ),
@@ -1330,15 +1377,99 @@ Future<int?> showCategoryPicker(
   bool allowNone = false,
 }) {
   var query = '';
+  final ids = categories.map((category) => category.id).toSet();
+  final roots =
+      categories
+          .where(
+            (category) =>
+                category.parentId == null ||
+                category.parentId == 0 ||
+                category.parentId == category.id ||
+                !ids.contains(category.parentId),
+          )
+          .toList()
+        ..sort(
+          (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+        );
+  final children = <int, List<Category>>{};
+  for (final category in categories) {
+    final parent = category.parentId;
+    if (parent != null &&
+        parent != 0 &&
+        parent != category.id &&
+        ids.contains(parent)) {
+      children.putIfAbsent(parent, () => []).add(category);
+    }
+  }
+  for (final list in children.values) {
+    list.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+  }
+
+  bool containsId(Category category, int? id) {
+    if (id == null) return false;
+    if (category.id == id) return true;
+    return (children[category.id] ?? const []).any(
+      (child) => containsId(child, id),
+    );
+  }
+
+  Widget tile(Category category) {
+    final selected = category.id == initialId;
+    final leading = Icon(
+      iconForCategory(category.icon),
+      color: colorFromDb(category.color),
+    );
+    final title = Text(category.label);
+    final trailing = selected ? const Icon(Icons.check) : null;
+    final childCategories = children[category.id] ?? const <Category>[];
+    if (childCategories.isEmpty) {
+      return ListTile(
+        selected: selected,
+        leading: leading,
+        title: title,
+        trailing: trailing,
+        onTap: () => Navigator.of(context).pop(category.id),
+      );
+    }
+    return ExpansionTile(
+      initiallyExpanded: containsId(category, initialId),
+      leading: leading,
+      title: title,
+      trailing: trailing,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      childrenPadding: const EdgeInsets.only(left: 16),
+      children: [
+        ListTile(
+          contentPadding: const EdgeInsets.only(left: 24, right: 16),
+          leading: Icon(
+            iconForCategory(category.icon),
+            size: 20,
+            color: colorFromDb(category.color),
+          ),
+          title: Text(category.label),
+          trailing: selected ? const Icon(Icons.check) : null,
+          selected: selected,
+          onTap: () => Navigator.of(context).pop(category.id),
+        ),
+        for (final child in childCategories) tile(child),
+      ],
+    );
+  }
+
   return showModalBottomSheet<int>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) {
+        final searching = query.trim().isNotEmpty;
         final filtered = categories
-            .where((category) =>
-                category.displayPath.toLowerCase().contains(query.toLowerCase()))
+            .where(
+              (category) => category.displayPath.toLowerCase().contains(
+                query.toLowerCase(),
+              ),
+            )
             .toList();
         return DraggableScrollableSheet(
           expand: false,
@@ -1356,34 +1487,39 @@ Future<int?> showCategoryPicker(
                   onChanged: (value) => setState(() => query = value),
                 ),
               ),
-              if (allowNone)
+              if (allowNone && !searching)
                 ListTile(
                   leading: const Icon(Icons.block),
                   title: const Text('No category'),
                   onTap: () => Navigator.of(context).pop(noCategoryId),
                 ),
               Expanded(
-                child: ListView.builder(
-                  controller: controller,
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final category = filtered[index];
-                    final selected = category.id == initialId;
-                    return ListTile(
-                      selected: selected,
-                      leading: Icon(
-                        iconForCategory(category.icon),
-                        color: colorFromDb(category.color),
+                child: searching
+                    ? ListView.builder(
+                        controller: controller,
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final category = filtered[index];
+                          final selected = category.id == initialId;
+                          return ListTile(
+                            selected: selected,
+                            leading: Icon(
+                              iconForCategory(category.icon),
+                              color: colorFromDb(category.color),
+                            ),
+                            title: Text(category.label),
+                            subtitle: category.parentId == null
+                                ? null
+                                : Text(category.displayPath),
+                            trailing: selected ? const Icon(Icons.check) : null,
+                            onTap: () => Navigator.of(context).pop(category.id),
+                          );
+                        },
+                      )
+                    : ListView(
+                        controller: controller,
+                        children: [for (final root in roots) tile(root)],
                       ),
-                      title: Text(category.label),
-                      subtitle: category.parentId == null
-                          ? null
-                          : Text(category.displayPath),
-                      trailing: selected ? const Icon(Icons.check) : null,
-                      onTap: () => Navigator.of(context).pop(category.id),
-                    );
-                  },
-                ),
               ),
             ],
           ),
