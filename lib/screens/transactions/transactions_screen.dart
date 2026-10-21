@@ -942,6 +942,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen>
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<TransactionPeriod>(
+                  key: ValueKey(period),
                   initialValue: period,
                   decoration: const InputDecoration(
                     labelText: 'Period',
