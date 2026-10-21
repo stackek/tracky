@@ -453,7 +453,7 @@ class _TransactionEditorScreenState
                       ),
                     ),
                   ],
-                  onChanged: (value) => setState(() => _payeeId = value),
+                  onChanged: _selectPayee,
                   trailingAction: IconButton(
                     tooltip: 'Add payee',
                     icon: const Icon(Icons.add),
@@ -764,6 +764,16 @@ class _TransactionEditorScreenState
     return result;
   }
 
+  Future<void> _selectPayee(int? payeeId) async {
+    setState(() => _payeeId = payeeId);
+    if (payeeId == null || _splitMode || _type == DraftType.transfer) return;
+    final previous = await ref
+        .read(repositoryProvider)
+        .lastTransactionForPayee(payeeId);
+    if (!mounted || previous?.catId == null) return;
+    setState(() => _categoryId = previous!.catId);
+  }
+
   Future<void> _addPayee() async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
@@ -792,7 +802,7 @@ class _TransactionEditorScreenState
     if (name == null || name.trim().isEmpty) return;
     final id = await ref.read(repositoryProvider).insertPayee(name.trim());
     ref.invalidate(payeesProvider);
-    setState(() => _payeeId = id);
+    await _selectPayee(id);
   }
 
   Future<void> _pickTags(List<Tag> tags) async {

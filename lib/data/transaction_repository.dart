@@ -10,12 +10,7 @@ import 'repository.dart';
 enum DraftType { expense, income, transfer, split }
 
 class SplitDraft {
-  SplitDraft({
-    this.id,
-    this.categoryId,
-    this.amount = 0,
-    this.comment = '',
-  });
+  SplitDraft({this.id, this.categoryId, this.amount = 0, this.comment = ''});
 
   int? id;
   int? categoryId;
@@ -41,10 +36,10 @@ class TransactionDraft {
     this.crStatus = 'UNRECONCILED',
     List<SplitDraft>? parts,
     List<int>? tagIds,
-  })  : date = date ?? DateTime.now(),
-        valueDate = valueDate ?? date ?? DateTime.now(),
-        parts = parts ?? [],
-        tagIds = tagIds ?? [];
+  }) : date = date ?? DateTime.now(),
+       valueDate = valueDate ?? date ?? DateTime.now(),
+       parts = parts ?? [],
+       tagIds = tagIds ?? [];
 
   int? id;
   DraftType type;
@@ -85,7 +80,9 @@ extension TransactionRepository on Repository {
       if (ids.isEmpty) {
         conditions.add('1 = 0');
       } else {
-        conditions.add('t.cat_id IN (${List.filled(ids.length, '?').join(',')})');
+        conditions.add(
+          't.cat_id IN (${List.filled(ids.length, '?').join(',')})',
+        );
         args.addAll(ids);
       }
     }
@@ -150,6 +147,20 @@ extension TransactionRepository on Repository {
     return rows.map(Transaction.fromMap).toList();
   }
 
+  Future<Transaction?> lastTransactionForPayee(int payeeId) async {
+    final list = await transactions(
+      TransactionFilter(payeeId: payeeId, period: TransactionPeriod.all),
+    );
+    for (final transaction in list) {
+      if (!transaction.isSplit &&
+          !transaction.isTransfer &&
+          transaction.catId != null) {
+        return transaction;
+      }
+    }
+    return null;
+  }
+
   Future<Transaction?> transaction(int id) async {
     final list = await transactions(
       const TransactionFilter(includeArchived: true).copyWith(),
@@ -157,7 +168,8 @@ extension TransactionRepository on Repository {
     for (final transaction in list) {
       if (transaction.id == id) return transaction;
     }
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT t.*, c.label AS cat_label, c.type AS cat_type, c.icon AS cat_icon,
              c.color AS cat_color, p.name AS payee_name, m.label AS method_label,
              a.label AS account_label, a.currency AS currency,
@@ -177,19 +189,24 @@ extension TransactionRepository on Repository {
       LEFT JOIN accounts a ON a._id = t.account_id
       LEFT JOIN accounts ta ON ta._id = t.transfer_account
       WHERE t._id = ?
-    ''', [id]);
+    ''',
+      [id],
+    );
     return rows.isEmpty ? null : Transaction.fromMap(rows.first);
   }
 
   Future<List<Transaction>> children(int parentId) async {
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT t.*, c.label AS cat_label, c.type AS cat_type, c.icon AS cat_icon,
              c.color AS cat_color, c.label AS cat_path
       FROM transactions t
       LEFT JOIN categories c ON c._id = t.cat_id
       WHERE t.parent_id = ?
       ORDER BY t._id
-    ''', [parentId]);
+    ''',
+      [parentId],
+    );
     return rows.map(Transaction.fromMap).toList();
   }
 
@@ -253,8 +270,11 @@ extension TransactionRepository on Repository {
         return _updateSplit(txn, existing, draft);
       }
       if (existing.isSplit) {
-        await txn.delete('transactions',
-            where: 'parent_id = ?', whereArgs: [existing.id]);
+        await txn.delete(
+          'transactions',
+          where: 'parent_id = ?',
+          whereArgs: [existing.id],
+        );
       }
       return _updateSimple(txn, existing, draft);
     });
@@ -321,13 +341,17 @@ extension TransactionRepository on Repository {
     return parentId;
   }
 
-  Future<int> _insertTransfer(DatabaseExecutor txn, TransactionDraft draft) async {
+  Future<int> _insertTransfer(
+    DatabaseExecutor txn,
+    TransactionDraft draft,
+  ) async {
     final source = draft.accountId!;
     final target = draft.targetAccountId!;
     final uuid = newUuid();
     final sourceAmount = -draft.amount.abs();
-    final targetAmount =
-        draft.targetAmount == 0 ? draft.amount.abs() : draft.targetAmount.abs();
+    final targetAmount = draft.targetAmount == 0
+        ? draft.amount.abs()
+        : draft.targetAmount.abs();
     final sourceId = await _insert(
       txn,
       accountId: source,
@@ -411,8 +435,11 @@ extension TransactionRepository on Repository {
       where: '_id = ?',
       whereArgs: [existing.id],
     );
-    await txn.delete('transactions',
-        where: 'parent_id = ?', whereArgs: [existing.id]);
+    await txn.delete(
+      'transactions',
+      where: 'parent_id = ?',
+      whereArgs: [existing.id],
+    );
     for (final part in draft.parts) {
       await _insert(
         txn,
@@ -446,8 +473,9 @@ extension TransactionRepository on Repository {
     }
     final source = draft.accountId!;
     final target = draft.targetAccountId!;
-    final targetAmount =
-        draft.targetAmount == 0 ? draft.amount.abs() : draft.targetAmount.abs();
+    final targetAmount = draft.targetAmount == 0
+        ? draft.amount.abs()
+        : draft.targetAmount.abs();
     await txn.update(
       'transactions',
       {
@@ -485,11 +513,13 @@ extension TransactionRepository on Repository {
     return sourceId;
   }
 
-  Future<Transaction?> _transactionWithTxn(
-    DatabaseExecutor txn,
-    int id,
-  ) async {
-    final rows = await txn.query('transactions', where: '_id = ?', whereArgs: [id], limit: 1);
+  Future<Transaction?> _transactionWithTxn(DatabaseExecutor txn, int id) async {
+    final rows = await txn.query(
+      'transactions',
+      where: '_id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     final map = rows.first;
     return Transaction.fromMap({
@@ -506,14 +536,23 @@ extension TransactionRepository on Repository {
   }
 
   Future<void> _deleteWithTxn(DatabaseExecutor txn, int id) async {
-    final rows = await txn.query('transactions', where: '_id = ?', whereArgs: [id], limit: 1);
+    final rows = await txn.query(
+      'transactions',
+      where: '_id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) return;
     final map = rows.first;
     final peer = asInt(map['transfer_peer']);
     final ids = <int>[id];
     if (peer != null) ids.add(peer);
-    final childRows = await txn.query('transactions',
-        columns: ['_id'], where: 'parent_id = ?', whereArgs: [id]);
+    final childRows = await txn.query(
+      'transactions',
+      columns: ['_id'],
+      where: 'parent_id = ?',
+      whereArgs: [id],
+    );
     ids.addAll(childRows.map((row) => asIntOr(row['_id'], 0)));
     final placeholders = List.filled(ids.length, '?').join(',');
     final attachmentRows = await txn.rawQuery('''
@@ -529,24 +568,33 @@ extension TransactionRepository on Repository {
           await file.delete();
         } catch (_) {}
       }
-      await txn.delete('attachments',
-          where: '_id = ?', whereArgs: [asInt(attachment['_id'])]);
+      await txn.delete(
+        'attachments',
+        where: '_id = ?',
+        whereArgs: [asInt(attachment['_id'])],
+      );
     }
     for (final transactionId in ids) {
-      await txn.delete('transactions',
-          where: '_id = ?', whereArgs: [transactionId]);
+      await txn.delete(
+        'transactions',
+        where: '_id = ?',
+        whereArgs: [transactionId],
+      );
     }
   }
 
   // ------------------------------------------------------------ attachments
 
   Future<List<Attachment>> attachmentsForTransaction(int transactionId) async {
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT a._id, a.uri FROM attachments a
       JOIN transaction_attachments ta ON ta.attachment_id = a._id
       WHERE ta.transaction_id = ?
       ORDER BY a._id
-    ''', [transactionId]);
+    ''',
+      [transactionId],
+    );
     return rows.map(Attachment.fromMap).toList();
   }
 
@@ -558,10 +606,9 @@ extension TransactionRepository on Repository {
     while (await target.exists()) {
       final extension = p.extension(name);
       final base = p.basenameWithoutExtension(name);
-      target = File(p.join(
-        database.picturesDir.path,
-        '${base}_${counter++}$extension',
-      ));
+      target = File(
+        p.join(database.picturesDir.path, '${base}_${counter++}$extension'),
+      );
     }
     await source.copy(target.path);
     final attachmentId = await db.insert('attachments', {
@@ -576,8 +623,13 @@ extension TransactionRepository on Repository {
   }
 
   Future<void> removeAttachment(int attachmentId) async {
-    final rows = await db.query('attachments',
-        columns: ['uri'], where: '_id = ?', whereArgs: [attachmentId], limit: 1);
+    final rows = await db.query(
+      'attachments',
+      columns: ['uri'],
+      where: '_id = ?',
+      whereArgs: [attachmentId],
+      limit: 1,
+    );
     if (rows.isNotEmpty) {
       final file = File(asStringOr(rows.first['uri']));
       if (await file.exists()) {
@@ -586,18 +638,24 @@ extension TransactionRepository on Repository {
         } catch (_) {}
       }
     }
-    await db.delete('transaction_attachments',
-        where: 'attachment_id = ?', whereArgs: [attachmentId]);
-    await db.delete('attachments',
-        where: '_id = ?', whereArgs: [attachmentId]);
+    await db.delete(
+      'transaction_attachments',
+      where: 'attachment_id = ?',
+      whereArgs: [attachmentId],
+    );
+    await db.delete('attachments', where: '_id = ?', whereArgs: [attachmentId]);
   }
 
   Future<List<Map<String, Object?>>> allAttachments() =>
       db.rawQuery('SELECT _id, uri FROM attachments ORDER BY _id');
 
   Future<void> updateAttachmentUri(int id, String uri) async {
-    await db.update('attachments', {'uri': uri},
-        where: '_id = ?', whereArgs: [id]);
+    await db.update(
+      'attachments',
+      {'uri': uri},
+      where: '_id = ?',
+      whereArgs: [id],
+    );
   }
 
   // ------------------------------------------------------------------ stats
@@ -619,8 +677,7 @@ extension TransactionRepository on Repository {
     required String homeCurrency,
   }) async {
     final accountIds = await _statsAccountIds(accountId);
-    final selectedAccount =
-        accountId == null ? null : await account(accountId);
+    final selectedAccount = accountId == null ? null : await account(accountId);
     final displayCurrency = selectedAccount?.currency ?? homeCurrency;
     if (accountIds.isEmpty) {
       return StatsData(
@@ -688,13 +745,15 @@ extension TransactionRepository on Repository {
       ORDER BY SUM($categoryAmount * $rateExpression) DESC
     ''', rangeArgs);
     final byCategory = categoryRows
-        .map((row) => CategoryTotal(
-              categoryId: asIntOr(row['group_id'], 0),
-              label: asStringOr(row['label'], 'Uncategorized'),
-              icon: asString(row['icon']),
-              color: asInt(row['color']),
-              amount: asIntOr(row['amount'], 0),
-            ))
+        .map(
+          (row) => CategoryTotal(
+            categoryId: asIntOr(row['group_id'], 0),
+            label: asStringOr(row['label'], 'Uncategorized'),
+            icon: asString(row['icon']),
+            color: asInt(row['color']),
+            amount: asIntOr(row['amount'], 0),
+          ),
+        )
         .toList();
 
     return StatsData(
@@ -713,15 +772,10 @@ extension TransactionRepository on Repository {
     required String homeCurrency,
   }) async {
     final accountIds = await _statsAccountIds(accountId);
-    final selectedAccount =
-        accountId == null ? null : await account(accountId);
+    final selectedAccount = accountId == null ? null : await account(accountId);
     final displayCurrency = selectedAccount?.currency ?? homeCurrency;
     if (accountIds.isEmpty) {
-      return PeriodTotals(
-        income: 0,
-        expense: 0,
-        currency: displayCurrency,
-      );
+      return PeriodTotals(income: 0, expense: 0, currency: displayCurrency);
     }
     final rates = accountId == null
         ? await exchangeRatesTo(homeCurrency)
@@ -771,8 +825,7 @@ extension TransactionRepository on Repository {
   }) async {
     final accountIds = await _statsAccountIds(accountId);
     if (accountIds.isEmpty) return null;
-    final selectedAccount =
-        accountId == null ? null : await account(accountId);
+    final selectedAccount = accountId == null ? null : await account(accountId);
     final displayCurrency = selectedAccount?.currency ?? homeCurrency;
     final rates = accountId == null
         ? await exchangeRatesTo(homeCurrency)
@@ -828,13 +881,16 @@ extension TransactionRepository on Repository {
 
   Future<List<Budget>> budgets() async {
     final now = DateTime.now();
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT b.*, COALESCE((
         SELECT SUM(ba.budget) FROM budget_allocations ba
         WHERE ba.budget_id = b._id AND ba.year = ? AND ba.second = ?
       ), 0) AS total_budget
       FROM budgets b ORDER BY b.title COLLATE NOCASE
-    ''', [now.year, now.month - 1]);
+    ''',
+      [now.year, now.month - 1],
+    );
     return rows.map(Budget.fromMap).toList();
   }
 
@@ -916,14 +972,17 @@ extension TransactionRepository on Repository {
     required int month,
   }) async {
     final budget = (await budgets()).firstWhere((b) => b.id == budgetId);
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT ba.*, c.label AS category_label, c.icon AS category_icon,
              c.color AS category_color
       FROM budget_allocations ba
       LEFT JOIN categories c ON c._id = ba.cat_id
       WHERE ba.budget_id = ? AND ba.year = ? AND ba.second = ?
       ORDER BY c.label COLLATE NOCASE
-    ''', [budgetId, year, month - 1]);
+    ''',
+      [budgetId, year, month - 1],
+    );
     final spending = await _spendingByCategory(
       accountId: budget.accountId,
       year: year,
