@@ -38,6 +38,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   Widget build(BuildContext context) {
     final accounts = ref.watch(accountsProvider).value ?? const <Account>[];
     final filter = ref.watch(transactionFilterProvider);
+    final statsPeriod = ref.watch(transactionStatsPeriodProvider);
+    final statsRange = ref.watch(transactionStatsRangeProvider);
     final transactions = ref.watch(transactionsProvider);
     final topCategory = ref.watch(topCategoryProvider).value;
     final periodTotals = ref.watch(periodTotalsProvider).value;
@@ -74,10 +76,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final headerLabel = _selectionMode
         ? '${selectedItems.length} selected'
         : (selectedAccount?.label ?? 'All accounts');
-    final periodLabel = filter.period == TransactionPeriod.custom
-        ? '${filter.from == null ? '' : formatShortDate(filter.from!)}'
-              '${filter.to == null ? '' : ' – ${formatShortDate(filter.to!)}'}'
-        : filter.period.label;
+    final periodLabel = statsPeriod == TransactionPeriod.custom
+        ? '${statsRange == null ? '' : formatShortDate(statsRange.start)}'
+              '${statsRange == null ? '' : ' – ${formatShortDate(statsRange.end)}'}'
+        : statsPeriod.label;
 
     return PopScope(
       canPop: !_showSearch && !_selectionMode,
@@ -256,6 +258,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                         periodTotals: periodTotals,
                         topCategory: topCategory,
                         selectedIds: _selectedIds,
+                        onSelectPeriod: () => _showStatsPeriodSheet(context),
                         onToggleSelection: (id) => setState(() {
                           if (!_selectedIds.remove(id)) {
                             _selectedIds.add(id);
@@ -819,6 +822,52 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     );
   }
 
+  Future<void> _showStatsPeriodSheet(BuildContext context) async {
+    final currentPeriod = ref.read(transactionStatsPeriodProvider);
+    final currentRange = ref.read(transactionStatsRangeProvider);
+    final now = DateTime.now();
+    final value = await showSearchPicker<TransactionPeriod>(
+      context: context,
+      title: 'Statistics period',
+      hint: 'Search periods',
+      selected: currentPeriod,
+      entries: [
+        for (final period in TransactionPeriod.values)
+          PickerEntry(
+            value: period,
+            label: period.label,
+            icon: period == TransactionPeriod.custom
+                ? Icons.date_range
+                : Icons.calendar_month_outlined,
+          ),
+      ],
+    );
+    if (value == null || !context.mounted) return;
+    if (value != TransactionPeriod.custom) {
+      ref.read(transactionStatsRangeProvider.notifier).set(null);
+      ref.read(transactionStatsPeriodProvider.notifier).set(value);
+      return;
+    }
+    final earliest = ref.read(earliestTransactionDateProvider).value;
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: earliest ?? DateTime(2000),
+      lastDate: now,
+      initialDateRange:
+          currentRange ??
+          DateTimeRange(
+            start: DateTime(now.year, now.month, 1),
+            end: now,
+          ),
+      helpText: 'Statistics period',
+    );
+    if (range == null) return;
+    ref.read(transactionStatsRangeProvider.notifier).set(range);
+    ref.read(transactionStatsPeriodProvider.notifier).set(
+      TransactionPeriod.custom,
+    );
+  }
+
   Future<void> _showFilterSheet(BuildContext context) async {
     final categories = ref.read(categoriesProvider).value ?? const <Category>[];
     final payees = ref.read(payeesProvider).value ?? const <Payee>[];
@@ -842,190 +891,178 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             20,
             MediaQuery.viewInsetsOf(context).bottom + 24,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Filter transactions',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<TransactionPeriod>(
-                initialValue: period,
-                decoration: const InputDecoration(
-                  labelText: 'Period',
-                  prefixIcon: Icon(Icons.calendar_month_outlined),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Filter transactions',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                items: [
-                  for (final value in TransactionPeriod.values)
-                    DropdownMenuItem(value: value, child: Text(value.label)),
-                ],
-                onChanged: (value) {
-                  if (value != null) setModalState(() => period = value);
-                },
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.category_outlined),
-                title: const Text('Category'),
-                subtitle: Text(
-                  categoryId == null
-                      ? 'Any category'
-                      : categories
-                                .where((category) => category.id == categoryId)
-                                .firstOrNull
-                                ?.displayPath ??
-                            'Any category',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  final selected = await showCategoryPicker(
-                    context,
-                    categories,
-                    initialId: categoryId,
-                    allowNone: true,
-                  );
-                  if (selected == null) return;
-                  setModalState(
-                    () =>
-                        categoryId = selected == noCategoryId ? null : selected,
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.person_outline),
-                title: const Text('Payee'),
-                subtitle: Text(
-                  payeeId == null
-                      ? 'Any payee'
-                      : payees
-                                .where((payee) => payee.id == payeeId)
-                                .firstOrNull
-                                ?.name ??
-                            'Any payee',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  final selected = await showSearchPicker<int>(
-                    context: context,
-                    title: 'Payee',
-                    hint: 'Search payees',
-                    selected: payeeId ?? -1,
-                    allowNone: true,
-                    noneLabel: 'Any payee',
-                    noneValue: -1,
-                    entries: [
-                      for (final payee in payees)
-                        PickerEntry(
-                          value: payee.id,
-                          label: payee.name,
-                          subtitle: payee.iban,
-                          icon: Icons.person_outline,
-                        ),
-                    ],
-                  );
-                  if (selected == null) return;
-                  setModalState(
-                    () => payeeId = selected == -1 ? null : selected,
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.event),
-                      label: Text(
-                        from == null ? 'From date' : formatShortDate(from!),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<TransactionPeriod>(
+                  initialValue: period,
+                  decoration: const InputDecoration(
+                    labelText: 'Period',
+                    prefixIcon: Icon(Icons.calendar_month_outlined),
+                  ),
+                  items: [
+                    for (final value in TransactionPeriod.values)
+                      DropdownMenuItem(
+                        value: value,
+                        child: Text(value.label),
                       ),
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: from ?? DateTime.now(),
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
-                        if (picked != null) {
-                          setModalState(() {
-                            from = picked;
-                            period = TransactionPeriod.custom;
-                          });
-                        }
-                      },
-                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setModalState(() => period = value);
+                  },
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.date_range),
+                  label: Text(
+                    from == null && to == null
+                        ? 'Select date range'
+                        : '${from == null ? '' : formatShortDate(from!)}'
+                              '${from == null || to == null ? '' : ' – '}'
+                              '${to == null ? '' : formatShortDate(to!)}',
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.event_available),
-                      label: Text(
-                        to == null ? 'To date' : formatShortDate(to!),
+                  onPressed: () async {
+                    final range = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                      initialDateRange: from != null && to != null
+                          ? DateTimeRange(start: from!, end: to!)
+                          : null,
+                      helpText: 'Filter period',
+                    );
+                    if (range != null) {
+                      setModalState(() {
+                        from = range.start;
+                        to = range.end;
+                        period = TransactionPeriod.custom;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.category_outlined),
+                  title: const Text('Category'),
+                  subtitle: Text(
+                    categoryId == null
+                        ? 'Any category'
+                        : categories
+                                  .where(
+                                    (category) => category.id == categoryId,
+                                  )
+                                  .firstOrNull
+                                  ?.displayPath ??
+                              'Any category',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final selected = await showCategoryPicker(
+                      context,
+                      categories,
+                      initialId: categoryId,
+                      allowNone: true,
+                    );
+                    if (selected == null) return;
+                    setModalState(
+                      () => categoryId = selected == noCategoryId
+                          ? null
+                          : selected,
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('Payee'),
+                  subtitle: Text(
+                    payeeId == null
+                        ? 'Any payee'
+                        : payees
+                                  .where((payee) => payee.id == payeeId)
+                                  .firstOrNull
+                                  ?.name ??
+                              'Any payee',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final selected = await showSearchPicker<int>(
+                      context: context,
+                      title: 'Payee',
+                      hint: 'Search payees',
+                      selected: payeeId ?? -1,
+                      allowNone: true,
+                      noneLabel: 'Any payee',
+                      noneValue: -1,
+                      entries: [
+                        for (final payee in payees)
+                          PickerEntry(
+                            value: payee.id,
+                            label: payee.name,
+                            subtitle: payee.iban,
+                            icon: Icons.person_outline,
+                          ),
+                      ],
+                    );
+                    if (selected == null) return;
+                    setModalState(
+                      () => payeeId = selected == -1 ? null : selected,
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Include archived'),
+                  value: includeArchived,
+                  onChanged: (value) =>
+                      setModalState(() => includeArchived = value),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          ref.read(transactionFilterProvider.notifier).clear();
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Clear all'),
                       ),
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: to ?? DateTime.now(),
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
-                        if (picked != null) {
-                          setModalState(() {
-                            to = picked;
-                            period = TransactionPeriod.custom;
-                          });
-                        }
-                      },
                     ),
-                  ),
-                ],
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Include archived'),
-                value: includeArchived,
-                onChanged: (value) =>
-                    setModalState(() => includeArchived = value),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        ref.read(transactionFilterProvider.notifier).clear();
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Clear all'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () {
+                          final notifier = ref.read(
+                            transactionFilterProvider.notifier,
+                          );
+                          notifier.setCategory(categoryId);
+                          notifier.setPayee(payeeId);
+                          if (period == TransactionPeriod.custom) {
+                            notifier.setDates(from, to);
+                          } else {
+                            notifier.setPeriod(period);
+                          }
+                          notifier.setIncludeArchived(includeArchived);
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Apply'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () {
-                        final notifier = ref.read(
-                          transactionFilterProvider.notifier,
-                        );
-                        notifier.setCategory(categoryId);
-                        notifier.setPayee(payeeId);
-                        if (period == TransactionPeriod.custom) {
-                          notifier.setDates(from, to);
-                        } else {
-                          notifier.setPeriod(period);
-                        }
-                        notifier.setIncludeArchived(includeArchived);
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Apply'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1117,6 +1154,7 @@ class _TransactionList extends ConsumerWidget {
     required this.periodTotals,
     required this.topCategory,
     required this.selectedIds,
+    required this.onSelectPeriod,
     required this.onToggleSelection,
     required this.onRefresh,
   });
@@ -1127,6 +1165,7 @@ class _TransactionList extends ConsumerWidget {
   final PeriodTotals? periodTotals;
   final CategoryTotal? topCategory;
   final Set<int> selectedIds;
+  final VoidCallback onSelectPeriod;
   final ValueChanged<int> onToggleSelection;
   final Future<void> Function() onRefresh;
 
@@ -1176,6 +1215,7 @@ class _TransactionList extends ConsumerWidget {
                     expense: expense,
                     currency: currency,
                     periodLabel: periodLabel,
+                    onSelectPeriod: onSelectPeriod,
                   ),
                   if (topCategory != null) ...[
                     const SizedBox(height: 10),
@@ -1276,60 +1316,83 @@ class _SummaryStrip extends StatelessWidget {
     required this.expense,
     required this.currency,
     required this.periodLabel,
+    required this.onSelectPeriod,
   });
 
   final int income;
   final int expense;
   final String currency;
   final String periodLabel;
+  final VoidCallback onSelectPeriod;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
+    return Material(
+      color: theme.colorScheme.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
         borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            periodLabel,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
+        onTap: onSelectPeriod,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: _SummaryItem(
-                  label: 'Income',
-                  value: formatMoney(income, currency),
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 34,
-                color: theme.colorScheme.outlineVariant,
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: _SummaryItem(
-                    label: 'Expenses',
-                    value: formatMoney(expense, currency),
-                    color: theme.colorScheme.error,
+              Row(
+                children: [
+                  Icon(
+                    Icons.calendar_month_outlined,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      periodLabel,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.expand_more,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SummaryItem(
+                      label: 'Income',
+                      value: formatMoney(income, currency),
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 34,
+                    color: theme.colorScheme.outlineVariant,
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: _SummaryItem(
+                        label: 'Expenses',
+                        value: formatMoney(expense, currency),
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

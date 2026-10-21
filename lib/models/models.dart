@@ -499,7 +499,7 @@ class TransactionFilter {
     this.categoryId,
     this.payeeId,
     this.includeArchived = false,
-    this.period = TransactionPeriod.lastMonth,
+    this.period = TransactionPeriod.thisMonth,
   });
 
   final int? accountId;

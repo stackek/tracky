@@ -148,6 +148,30 @@ final transactionFilterProvider =
       TransactionFilterNotifier.new,
     );
 
+class TransactionStatsPeriodNotifier extends Notifier<TransactionPeriod> {
+  @override
+  TransactionPeriod build() => TransactionPeriod.thisMonth;
+
+  void set(TransactionPeriod value) => state = value;
+}
+
+final transactionStatsPeriodProvider =
+    NotifierProvider<TransactionStatsPeriodNotifier, TransactionPeriod>(
+      TransactionStatsPeriodNotifier.new,
+    );
+
+class TransactionStatsRangeNotifier extends Notifier<DateTimeRange?> {
+  @override
+  DateTimeRange? build() => null;
+
+  void set(DateTimeRange? value) => state = value;
+}
+
+final transactionStatsRangeProvider =
+    NotifierProvider<TransactionStatsRangeNotifier, DateTimeRange?>(
+      TransactionStatsRangeNotifier.new,
+    );
+
 class StatsMonthNotifier extends Notifier<DateTime> {
   @override
   DateTime build() => DateTime(DateTime.now().year, DateTime.now().month, 1);
@@ -240,26 +264,46 @@ final transactionsProvider = FutureProvider<List<Transaction>>((ref) {
 
 final periodTotalsProvider = FutureProvider<PeriodTotals>((ref) {
   final filter = ref.watch(transactionFilterProvider);
+  final period = ref.watch(transactionStatsPeriodProvider);
+  final range = ref.watch(transactionStatsRangeProvider);
   final settings = ref.watch(settingsProvider);
+  final statsFilter = TransactionFilter(
+    accountId: filter.accountId,
+    period: period,
+    from: range?.start,
+    to: range == null
+        ? null
+        : DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59),
+  );
   return ref
       .watch(repositoryProvider)
       .periodTotals(
-        accountId: filter.accountId,
-        from: filter.effectiveFrom,
-        to: filter.effectiveTo,
+        accountId: statsFilter.accountId,
+        from: statsFilter.effectiveFrom,
+        to: statsFilter.effectiveTo,
         homeCurrency: settings.homeCurrency,
       );
 });
 
 final topCategoryProvider = FutureProvider<CategoryTotal?>((ref) {
   final filter = ref.watch(transactionFilterProvider);
+  final period = ref.watch(transactionStatsPeriodProvider);
+  final range = ref.watch(transactionStatsRangeProvider);
   final settings = ref.watch(settingsProvider);
+  final statsFilter = TransactionFilter(
+    accountId: filter.accountId,
+    period: period,
+    from: range?.start,
+    to: range == null
+        ? null
+        : DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59),
+  );
   return ref
       .watch(repositoryProvider)
       .topCategorySpending(
-        accountId: filter.accountId,
-        from: filter.effectiveFrom,
-        to: filter.effectiveTo,
+        accountId: statsFilter.accountId,
+        from: statsFilter.effectiveFrom,
+        to: statsFilter.effectiveTo,
         homeCurrency: settings.homeCurrency,
       );
 });
