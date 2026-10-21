@@ -15,6 +15,10 @@ class AppPreferences {
   static const _lastBackupName = 'last_backup_name';
   static const _autoBackupEnabled = 'auto_backup_enabled';
   static const _autoBackupPeriod = 'auto_backup_period';
+  static const _autoBackupInterval = 'auto_backup_interval';
+  static const _autoBackupUnit = 'auto_backup_unit';
+  static const _autoBackupEncrypted = 'auto_backup_encrypted';
+  static const _autoBackupPassword = 'auto_backup_password';
   static const _autoBackupFolder = 'auto_backup_folder';
   static const _lastAutoBackupAt = 'last_auto_backup_at';
   static const _lastAutoBackupName = 'last_auto_backup_name';
@@ -98,6 +102,52 @@ class AppPreferences {
       _prefs.getString(_autoBackupPeriod) ?? 'weekly';
   set autoBackupPeriod(String value) =>
       _prefs.setString(_autoBackupPeriod, value);
+
+  int get autoBackupInterval {
+    final stored = _prefs.getInt(_autoBackupInterval);
+    if (stored != null && stored > 0) return stored;
+    switch (_prefs.getString(_autoBackupPeriod)) {
+      case 'daily':
+        return 1;
+      case 'monthly':
+        return 1;
+      default:
+        return 1;
+    }
+  }
+
+  set autoBackupInterval(int value) =>
+      _prefs.setInt(_autoBackupInterval, value);
+
+  String get autoBackupUnit {
+    final stored = _prefs.getString(_autoBackupUnit);
+    if (stored != null && stored.isNotEmpty) return stored;
+    switch (_prefs.getString(_autoBackupPeriod)) {
+      case 'daily':
+        return 'days';
+      case 'monthly':
+        return 'months';
+      default:
+        return 'weeks';
+    }
+  }
+
+  set autoBackupUnit(String value) =>
+      _prefs.setString(_autoBackupUnit, value);
+
+  bool get autoBackupEncrypted =>
+      _prefs.getBool(_autoBackupEncrypted) ?? false;
+  set autoBackupEncrypted(bool value) =>
+      _prefs.setBool(_autoBackupEncrypted, value);
+
+  String? get autoBackupPassword => _prefs.getString(_autoBackupPassword);
+  set autoBackupPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      _prefs.remove(_autoBackupPassword);
+    } else {
+      _prefs.setString(_autoBackupPassword, value);
+    }
+  }
 
   String? get autoBackupFolder => _prefs.getString(_autoBackupFolder);
   set autoBackupFolder(String? value) {

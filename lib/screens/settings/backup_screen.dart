@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/dates.dart';
+import '../../core/ui_utils.dart';
 import '../../data/auto_backup_service.dart';
 import '../../data/csv_service.dart';
 import '../../providers.dart';
@@ -31,46 +33,6 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.verified_user_outlined,
-                  color: theme.colorScheme.onPrimaryContainer,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'My Expenses compatible',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Your backup is a standard My Expenses zip: database, '
-                        'preferences and receipt pictures. You can restore it '
-                        'here or in My Expenses.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
           Text(
             'Backup',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -116,8 +78,8 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
             secondary: const Icon(Icons.schedule),
             title: const Text('Back up automatically'),
             subtitle: const Text(
-              'Saves an unencrypted backup to the selected folder in the '
-              'background when the app starts.',
+              'Saves a backup to the selected folder in the background when '
+              'the app starts.',
             ),
             value: prefs.autoBackupEnabled,
             onChanged: (value) async {
@@ -132,6 +94,31 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 }
               }
               prefs.autoBackupEnabled = value;
+              if (mounted) setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.lock_outline),
+            title: const Text('Encrypt automatic backups'),
+            subtitle: Text(
+              prefs.autoBackupEncrypted
+                  ? 'Password protected .enc files'
+                  : 'Unencrypted .zip files',
+            ),
+            value: prefs.autoBackupEncrypted,
+            onChanged: (value) async {
+              if (value) {
+                final password = await askBackupPassword(
+                  context,
+                  confirm: true,
+                );
+                if (password == null || password.isEmpty || !mounted) return;
+                prefs.autoBackupPassword = password;
+                prefs.autoBackupEncrypted = true;
+              } else {
+                prefs.autoBackupEncrypted = false;
+              }
               if (mounted) setState(() {});
             },
           ),
@@ -150,9 +137,10 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.event_repeat),
-            title: const Text('Backup period'),
+            title: const Text('Repeat every'),
             subtitle: Text(
-              AutoBackupPeriodInfo.parse(prefs.autoBackupPeriod).label,
+              '${prefs.autoBackupInterval} '
+              '${AutoBackupUnitInfo.parse(prefs.autoBackupUnit).labelFor(prefs.autoBackupInterval)}',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _pickAutoBackupPeriod,
@@ -238,27 +226,61 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
 
   Future<void> _pickAutoBackupPeriod() async {
     final prefs = ref.read(preferencesProvider);
-    final current = AutoBackupPeriodInfo.parse(prefs.autoBackupPeriod);
-    final result = await showModalBottomSheet<AutoBackupPeriod>(
+    final controller = TextEditingController(
+      text: prefs.autoBackupInterval.toString(),
+    );
+    var unit = AutoBackupUnitInfo.parse(prefs.autoBackupUnit);
+    final result = await showDialog<bool>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final period in AutoBackupPeriod.values)
-              ListTile(
-                leading: const Icon(Icons.event_repeat),
-                title: Text(period.label),
-                trailing: current == period ? const Icon(Icons.check) : null,
-                onTap: () => Navigator.of(context).pop(period),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Automatic backup period'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Repeat every',
+                ),
               ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<AutoBackupUnit>(
+                initialValue: unit,
+                decoration: const InputDecoration(labelText: 'Unit'),
+                items: [
+                  for (final value in AutoBackupUnit.values)
+                    DropdownMenuItem(
+                      value: value,
+                      child: Text(value.label),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => unit = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
           ],
         ),
       ),
     );
-    if (result == null || !mounted) return;
-    prefs.autoBackupPeriod = result.name;
+    final interval = int.tryParse(controller.text.trim()) ?? 1;
+    disposeAfterDialog([controller]);
+    if (result != true || !mounted) return;
+    prefs.autoBackupInterval = interval.clamp(1, 9999);
+    prefs.autoBackupUnit = unit.name;
     setState(() {});
   }
 

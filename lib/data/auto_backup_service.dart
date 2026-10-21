@@ -5,39 +5,48 @@ import 'package:path/path.dart' as p;
 import '../core/prefs.dart';
 import 'backup_service.dart';
 
-enum AutoBackupPeriod { daily, weekly, monthly }
+enum AutoBackupUnit { hours, days, weeks, months }
 
-extension AutoBackupPeriodInfo on AutoBackupPeriod {
+extension AutoBackupUnitInfo on AutoBackupUnit {
   String get label {
     switch (this) {
-      case AutoBackupPeriod.daily:
-        return 'Daily';
-      case AutoBackupPeriod.weekly:
-        return 'Weekly';
-      case AutoBackupPeriod.monthly:
-        return 'Monthly';
+      case AutoBackupUnit.hours:
+        return 'hours';
+      case AutoBackupUnit.days:
+        return 'days';
+      case AutoBackupUnit.weeks:
+        return 'weeks';
+      case AutoBackupUnit.months:
+        return 'months';
     }
   }
 
-  Duration get duration {
+  String labelFor(int interval) =>
+      interval == 1 ? label.substring(0, label.length - 1) : label;
+
+  Duration duration(int interval) {
     switch (this) {
-      case AutoBackupPeriod.daily:
-        return const Duration(days: 1);
-      case AutoBackupPeriod.weekly:
-        return const Duration(days: 7);
-      case AutoBackupPeriod.monthly:
-        return const Duration(days: 30);
+      case AutoBackupUnit.hours:
+        return Duration(hours: interval);
+      case AutoBackupUnit.days:
+        return Duration(days: interval);
+      case AutoBackupUnit.weeks:
+        return Duration(days: 7 * interval);
+      case AutoBackupUnit.months:
+        return Duration(days: 30 * interval);
     }
   }
 
-  static AutoBackupPeriod parse(String? value) {
+  static AutoBackupUnit parse(String? value) {
     switch (value) {
-      case 'daily':
-        return AutoBackupPeriod.daily;
-      case 'monthly':
-        return AutoBackupPeriod.monthly;
+      case 'hours':
+        return AutoBackupUnit.hours;
+      case 'days':
+        return AutoBackupUnit.days;
+      case 'months':
+        return AutoBackupUnit.months;
       default:
-        return AutoBackupPeriod.weekly;
+        return AutoBackupUnit.weeks;
     }
   }
 }
@@ -52,9 +61,11 @@ class AutoBackupService {
     if (!preferences.autoBackupEnabled) return null;
     final folder = preferences.autoBackupFolder;
     if (folder == null || folder.isEmpty) return null;
-    final period = AutoBackupPeriodInfo.parse(preferences.autoBackupPeriod);
+    final unit = AutoBackupUnitInfo.parse(preferences.autoBackupUnit);
+    final interval = preferences.autoBackupInterval.clamp(1, 9999);
     final last = preferences.lastAutoBackupAt;
-    if (last != null && DateTime.now().difference(last) < period.duration) {
+    if (last != null &&
+        DateTime.now().difference(last) < unit.duration(interval)) {
       return null;
     }
     return runNow();
@@ -69,7 +80,14 @@ class AutoBackupService {
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
-    final file = await backupService.export();
+    String? password;
+    if (preferences.autoBackupEncrypted) {
+      password = preferences.autoBackupPassword;
+      if (password == null || password.isEmpty) {
+        throw BackupException('Set a password for encrypted automatic backups.');
+      }
+    }
+    final file = await backupService.export(password: password);
     final target = File(p.join(directory.path, p.basename(file.path)));
     await file.copy(target.path);
     await preferences.recordAutoBackup(p.basename(target.path));
