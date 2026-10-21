@@ -1,42 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/currency.dart';
 import '../../core/dates.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 
-class DebtsScreen extends ConsumerWidget {
+class DebtsScreen extends ConsumerStatefulWidget {
   const DebtsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DebtsScreen> createState() => _DebtsScreenState();
+}
+
+class _DebtsScreenState extends ConsumerState<DebtsScreen> {
+  bool _showArchived = false;
+
+  @override
+  Widget build(BuildContext context) {
     final debts = ref.watch(debtsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Debts')),
+      appBar: AppBar(
+        title: Text(_showArchived ? 'Archived debts' : 'Debts'),
+        actions: [
+          IconButton(
+            tooltip: _showArchived ? 'Show active debts' : 'Show archived debts',
+            icon: Icon(
+              _showArchived ? Icons.inbox_outlined : Icons.archive_outlined,
+            ),
+            onPressed: () => setState(() => _showArchived = !_showArchived),
+          ),
+        ],
+      ),
       body: debts.when(
-        data: (items) => items.isEmpty
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Text(
-                    'No debts yet.\nMark a transaction as written to debt '
-                    'to track what a payee owes you or what you owe them.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              )
-            : RefreshIndicator(
-                onRefresh: () async => ref.invalidate(debtsProvider),
-                child: ListView.separated(
-                  padding: const EdgeInsets.only(bottom: 32),
-                  itemCount: items.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) =>
-                      _DebtTile(debt: items[index]),
+        data: (items) {
+          final visible = items
+              .where((debt) => debt.isArchived == _showArchived)
+              .toList();
+          if (visible.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  _showArchived
+                      ? 'No archived debts.'
+                      : 'No debts yet.\nMark a transaction as written to debt '
+                            'to track what a payee owes you or what you owe them.',
+                  textAlign: TextAlign.center,
                 ),
               ),
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(debtsProvider),
+            child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: 32),
+              itemCount: visible.length,
+              separatorBuilder: (context, index) =>
+                  const Divider(height: 1),
+              itemBuilder: (context, index) =>
+                  _DebtTile(debt: visible[index]),
+            ),
+          );
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) =>
             Center(child: Text('Could not load debts:\n$error')),
@@ -45,13 +72,13 @@ class DebtsScreen extends ConsumerWidget {
   }
 }
 
-class _DebtTile extends ConsumerWidget {
+class _DebtTile extends StatelessWidget {
   const _DebtTile({required this.debt});
 
   final Debt debt;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final balance = debt.currentBalance;
     final color = balance == 0
@@ -64,7 +91,10 @@ class _DebtTile extends ConsumerWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: color.withValues(alpha: 0.16),
-        child: Icon(Icons.handshake_outlined, color: color),
+        child: Icon(
+          debt.isArchived ? Icons.archive_outlined : Icons.handshake_outlined,
+          color: color,
+        ),
       ),
       title: Text(
         debt.label,
@@ -74,7 +104,7 @@ class _DebtTile extends ConsumerWidget {
       ),
       subtitle: Text(
         '${debt.payeeName ?? 'No payee'} • ${formatShortDate(debt.date)}'
-        '${debt.sealed ? ' • Closed' : ''}',
+        '${debt.isArchived ? ' • Archived' : ''}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -85,113 +115,7 @@ class _DebtTile extends ConsumerWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
-      onTap: () => _showDetails(context, ref),
-    );
-  }
-
-  Future<void> _showDetails(BuildContext context, WidgetRef ref) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(debt.label, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 4),
-              Text(debt.payeeName ?? 'No payee'),
-              if (debt.description.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(debt.description),
-              ],
-              const SizedBox(height: 16),
-              _DetailRow(
-                label: 'Original amount',
-                value: formatMoney(debt.amount, debt.currency),
-              ),
-              _DetailRow(
-                label: 'Current balance',
-                value: formatMoney(debt.currentBalance, debt.currency),
-              ),
-              _DetailRow(
-                label: 'Date',
-                value: formatShortDate(debt.date),
-              ),
-              _DetailRow(
-                label: 'Status',
-                value: debt.sealed
-                    ? 'Closed'
-                    : debt.currentBalance == 0
-                    ? 'Settled'
-                    : 'Open',
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Delete debt?'),
-                      content: const Text(
-                        'Transactions linked to this debt will be kept, '
-                        'but will no longer resolve it.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirmed != true) return;
-                  await ref.read(repositoryProvider).deleteDebt(debt.id);
-                  ref.invalidate(debtsProvider);
-                  ref.invalidate(transactionsProvider);
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('Delete debt'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ],
-      ),
+      onTap: () => context.push('/debt?id=${debt.id}'),
     );
   }
 }

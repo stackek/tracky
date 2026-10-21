@@ -12,6 +12,7 @@ import 'screens/budgets/budget_detail_screen.dart';
 import 'screens/budgets/budgets_screen.dart';
 import 'screens/categories/categories_screen.dart';
 import 'screens/categories/category_editor_screen.dart';
+import 'screens/debts/debt_detail_screen.dart';
 import 'screens/debts/debts_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/more/about_screen.dart';
@@ -113,6 +114,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           categoryId: int.tryParse(state.uri.queryParameters['id'] ?? ''),
           initialType:
               int.tryParse(state.uri.queryParameters['type'] ?? '') ?? 1,
+          initialParentId: int.tryParse(
+            state.uri.queryParameters['parent'] ?? '',
+          ),
         ),
       ),
       GoRoute(
@@ -123,6 +127,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/debts',
         builder: (context, state) => const DebtsScreen(),
+      ),
+      GoRoute(
+        path: '/debt',
+        builder: (context, state) => DebtDetailScreen(
+          debtId: int.tryParse(state.uri.queryParameters['id'] ?? '') ?? 0,
+        ),
       ),
       GoRoute(
         path: '/accounts',
