@@ -64,8 +64,8 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
       if (category != null) {
         _categoryId = category.id;
         _labelController.text = category.label;
-        _type = category.type == 0 ? widget.initialType : category.type;
         _parentId = category.parentId == category.id ? null : category.parentId;
+        _type = await _resolveType(category.type, _parentId);
         _color = category.color ?? categoryColorChoices.first;
         _icon = category.icon ?? 'category';
         _blockedParentIds = (await ref
@@ -79,11 +79,25 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
           .category(widget.initialParentId!);
       if (parent != null) {
         _parentId = parent.id;
-        _type = parent.type == 0 ? widget.initialType : parent.type;
+        _type = await _resolveType(widget.initialType, _parentId);
       }
     }
     _dirty = false;
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<int> _resolveType(int type, int? parentId) async {
+    final repo = ref.read(repositoryProvider);
+    var resolved = type;
+    var current = parentId;
+    var guard = 0;
+    while (resolved == 0 && current != null && guard++ < 20) {
+      final parent = await repo.category(current);
+      if (parent == null) break;
+      resolved = parent.type;
+      current = parent.parentId == parent.id ? null : parent.parentId;
+    }
+    return resolved == 0 ? widget.initialType : resolved;
   }
 
   @override
