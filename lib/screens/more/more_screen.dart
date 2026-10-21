@@ -68,7 +68,6 @@ class MoreScreen extends ConsumerWidget {
               _Tile(
                 icon: Icons.backup_outlined,
                 title: 'Backup and restore',
-                subtitle: 'Compatible with My Expenses backups',
                 onTap: () => context.push('/backup'),
               ),
               _Tile(
