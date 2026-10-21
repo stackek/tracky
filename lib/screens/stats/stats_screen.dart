@@ -71,17 +71,35 @@ class StatsScreen extends ConsumerWidget {
                       ref.read(statsRangeProvider.notifier).set(null),
                 ),
                 const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: ActionChip(
-                    avatar: selectedAccount == null
-                        ? const Icon(Icons.public, size: 18)
-                        : Icon(
-                            iconForAccountType(selectedAccount.type),
-                            size: 18,
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      alignment: Alignment.centerLeft,
+                    ),
+                    onPressed: () =>
+                        _showAccountMenu(context, ref, accounts),
+                    child: Row(
+                      children: [
+                        Icon(
+                          selectedAccount == null
+                              ? Icons.public
+                              : iconForAccountType(selectedAccount.type),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            selectedAccount?.label ?? 'All accounts',
                           ),
-                    label: Text(selectedAccount?.label ?? 'All accounts'),
-                    onPressed: () => _showAccountMenu(context, ref, accounts),
+                        ),
+                        const Icon(Icons.chevron_right, size: 18),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
