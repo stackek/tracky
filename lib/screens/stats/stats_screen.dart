@@ -68,7 +68,7 @@ class StatsScreen extends ConsumerWidget {
                   onNext: canGoNext
                       ? () => ref.read(statsMonthProvider.notifier).next()
                       : null,
-                  onPickRange: () => _pickRange(context, ref, earliest, now),
+                  onPickRange: () => _pickRange(context, ref),
                   onClearRange: () =>
                       ref.read(statsRangeProvider.notifier).set(null),
                 ),
@@ -195,18 +195,13 @@ class StatsScreen extends ConsumerWidget {
     context.go('/transactions');
   }
 
-  Future<void> _pickRange(
-    BuildContext context,
-    WidgetRef ref,
-    DateTime? earliest,
-    DateTime now,
-  ) async {
+  Future<void> _pickRange(BuildContext context, WidgetRef ref) async {
     final current = ref.read(statsRangeProvider);
     final month = ref.read(statsMonthProvider);
     final range = await showDateRangePicker(
       context: context,
-      firstDate: earliest ?? DateTime(2000),
-      lastDate: now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
       initialDateRange:
           current ??
           DateTimeRange(
