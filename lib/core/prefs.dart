@@ -8,6 +8,7 @@ class AppPreferences {
 
   static const _homeCurrency = 'home_currency';
   static const _onboardingDone = 'onboarding_done';
+  static const _lastSeenChangelogVersion = 'last_seen_changelog_version';
   static const _legacyPrefsXml = 'legacy_prefs_xml';
   static const _themeMode = 'theme_mode';
   static const _dynamicColor = 'dynamic_color';
@@ -31,6 +32,16 @@ class AppPreferences {
 
   bool get onboardingDone => _prefs.getBool(_onboardingDone) ?? false;
   set onboardingDone(bool value) => _prefs.setBool(_onboardingDone, value);
+
+  String? get lastSeenChangelogVersion =>
+      _prefs.getString(_lastSeenChangelogVersion);
+  set lastSeenChangelogVersion(String? value) {
+    if (value == null) {
+      _prefs.remove(_lastSeenChangelogVersion);
+    } else {
+      _prefs.setString(_lastSeenChangelogVersion, value);
+    }
+  }
 
   String get homeCurrency => _prefs.getString(_homeCurrency) ?? 'EUR';
   set homeCurrency(String value) => _prefs.setString(_homeCurrency, value);

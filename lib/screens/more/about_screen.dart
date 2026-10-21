@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/app_info.dart';
+import '../../core/links.dart';
 import '../../providers.dart';
 
 class AboutScreen extends ConsumerWidget {
@@ -24,7 +27,7 @@ class AboutScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Tracky',
+            appName,
             textAlign: TextAlign.center,
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w700,
@@ -32,7 +35,7 @@ class AboutScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Version 1.0.0',
+            appVersionLabel,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
@@ -67,18 +70,34 @@ class AboutScreen extends ConsumerWidget {
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.new_releases_outlined),
+            title: const Text('Changelog'),
+            subtitle: Text('What\'s new in ${latestChangelog.version}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/changelog'),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.code),
+            title: const Text('Source code'),
+            subtitle: const Text(repositoryUrl),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => openRepositoryPage(context),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.description_outlined),
             title: const Text('Open source licences'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showLicensePage(
               context: context,
-              applicationName: 'Tracky',
-              applicationVersion: '1.0.0',
+              applicationName: appName,
+              applicationVersion: appVersion,
             ),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.code),
+            leading: const Icon(Icons.gavel_outlined),
             title: const Text('Licence'),
             subtitle: const Text('GNU General Public License v3.0'),
           ),

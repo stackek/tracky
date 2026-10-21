@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/app_info.dart';
 import 'core/theme.dart';
 import 'providers.dart';
 import 'screens/accounts/account_editor_screen.dart';
@@ -14,6 +15,7 @@ import 'screens/categories/category_editor_screen.dart';
 import 'screens/debts/debts_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/more/about_screen.dart';
+import 'screens/more/changelog_screen.dart';
 import 'screens/more/more_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/payees/payees_screen.dart';
@@ -76,6 +78,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/about',
         builder: (context, state) => const AboutScreen(),
+      ),
+      GoRoute(
+        path: '/changelog',
+        builder: (context, state) => const ChangelogScreen(),
       ),
       GoRoute(
         path: '/edit',
@@ -165,7 +171,10 @@ class _TrackyAppState extends ConsumerState<TrackyApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runAutoBackup());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runAutoBackup();
+      _maybeShowChangelog();
+    });
   }
 
   @override
@@ -187,12 +196,23 @@ class _TrackyAppState extends ConsumerState<TrackyApp>
     }
   }
 
+  Future<void> _maybeShowChangelog() async {
+    final prefs = ref.read(preferencesProvider);
+    if (!prefs.onboardingDone ||
+        prefs.lastSeenChangelogVersion == appVersion ||
+        !mounted) {
+      return;
+    }
+    prefs.lastSeenChangelogVersion = appVersion;
+    await showChangelogDialog(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'Tracky',
+      title: appName,
       debugShowCheckedModeBanner: false,
       themeMode: settings.themeMode,
       theme: buildLightTheme(null),

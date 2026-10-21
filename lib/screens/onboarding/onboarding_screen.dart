@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/app_info.dart';
 import '../../providers.dart';
 import '../settings/backup_helpers.dart';
 
@@ -36,7 +37,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         type: 1,
       );
     }
-    ref.read(preferencesProvider).onboardingDone = true;
+    final preferences = ref.read(preferencesProvider);
+    preferences.onboardingDone = true;
+    preferences.lastSeenChangelogVersion = appVersion;
     ref.invalidate(settingsProvider);
     ref.invalidate(accountsProvider);
     ref.invalidate(activeAccountsProvider);
@@ -46,6 +49,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   void _afterRestore(int accounts, int transactions) {
+    ref.read(preferencesProvider).lastSeenChangelogVersion = appVersion;
     ref.invalidate(settingsProvider);
     ref.invalidate(accountsProvider);
     ref.invalidate(activeAccountsProvider);
