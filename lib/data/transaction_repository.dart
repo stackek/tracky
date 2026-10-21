@@ -93,9 +93,13 @@ extension TransactionRepository on Repository {
       case TransactionVoidFilter.both:
         break;
       case TransactionVoidFilter.voidOnly:
-        conditions.add('t.status = $statusVoid');
+        conditions.add(
+          "(t.status = $statusVoid OR t.cr_status = 'VOID')",
+        );
       case TransactionVoidFilter.nonVoid:
-        conditions.add('t.status != $statusVoid');
+        conditions.add(
+          "t.status != $statusVoid AND t.cr_status != 'VOID'",
+        );
     }
     if (!includeArchived) conditions.add('t.status != $statusArchived');
     if (filter.accountId != null) {

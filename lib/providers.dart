@@ -152,7 +152,8 @@ class TransactionFilterNotifier extends Notifier<TransactionFilter> {
     state = state.copyWith(
       minAmount: minAmount,
       maxAmount: maxAmount,
-      clearAmounts: minAmount == null && maxAmount == null,
+      clearMinAmount: minAmount == null,
+      clearMaxAmount: maxAmount == null,
     );
   }
 
