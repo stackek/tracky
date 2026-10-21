@@ -5,7 +5,6 @@ import 'package:my_expenses_open/core/ui_utils.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
-import '../../widgets/search_picker.dart';
 
 class PayeesScreen extends ConsumerStatefulWidget {
   const PayeesScreen({super.key});
@@ -74,32 +73,9 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
                                 : Text(payee.iban!),
                             onTap: () => _edit(payee),
                             trailing: IconButton(
-                              tooltip: 'More',
-                              icon: const Icon(Icons.more_vert),
-                              onPressed: () async {
-                                final action = await showActionSheet<String>(
-                                  context,
-                                  title: payee.name,
-                                  actions: const [
-                                    SheetAction(
-                                      value: 'edit',
-                                      label: 'Edit',
-                                      icon: Icons.edit_outlined,
-                                    ),
-                                    SheetAction(
-                                      value: 'delete',
-                                      label: 'Delete',
-                                      icon: Icons.delete_outline,
-                                      destructive: true,
-                                    ),
-                                  ],
-                                );
-                                if (action == 'edit') {
-                                  await _edit(payee);
-                                } else if (action == 'delete') {
-                                  await _delete(payee);
-                                }
-                              },
+                              tooltip: 'Delete payee',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _delete(payee),
                             ),
                           );
                         },
