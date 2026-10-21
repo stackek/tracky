@@ -1925,7 +1925,9 @@ class _TransactionEditorScreenState
         debtPayeeId: _debtPayeeId,
         resolveDebtId: _resolveDebtId,
         debtAmount: _debtAmount,
-        debtCurrency: _debtCurrency,
+        debtCurrency: _splitMode && _accountCurrency != _homeCurrency
+            ? _homeCurrency
+            : _debtCurrency,
       );
       final repo = ref.read(repositoryProvider);
       final id = await repo.saveTransaction(draft);
