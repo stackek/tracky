@@ -20,11 +20,13 @@ class TransactionsScreen extends ConsumerStatefulWidget {
 
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   bool _showSearch = false;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -53,10 +55,16 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             tooltip: 'Search',
             icon: Icon(_showSearch ? Icons.close : Icons.search),
             onPressed: () {
-              setState(() => _showSearch = !_showSearch);
-              if (!_showSearch) {
+              final show = !_showSearch;
+              setState(() => _showSearch = show);
+              if (!show) {
                 _searchController.clear();
+                _searchFocus.unfocus();
                 ref.read(transactionFilterProvider.notifier).setSearch('');
+              } else {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _searchFocus.requestFocus();
+                });
               }
             },
           ),
@@ -119,6 +127,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                       child: TextField(
                         controller: _searchController,
+                        focusNode: _searchFocus,
                         autofocus: true,
                         decoration: const InputDecoration(
                           hintText: 'Search transactions',
