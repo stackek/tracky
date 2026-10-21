@@ -18,12 +18,8 @@ class AboutScreen extends ConsumerWidget {
           Center(
             child: CircleAvatar(
               radius: 36,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              child: Icon(
-                Icons.account_balance_wallet,
-                size: 36,
-                color: theme.colorScheme.onPrimaryContainer,
-              ),
+              backgroundColor: const Color(0xFF000080),
+              backgroundImage: const AssetImage('assets/icon/logo.png'),
             ),
           ),
           const SizedBox(height: 14),

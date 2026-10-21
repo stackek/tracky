@@ -87,17 +87,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Spacer(),
-              Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: Icon(
-                  Icons.savings_outlined,
-                  size: 42,
-                  color: theme.colorScheme.onPrimaryContainer,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.asset(
+                  'assets/icon/logo.png',
+                  width: 76,
+                  height: 76,
+                  fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(height: 28),
