@@ -58,6 +58,8 @@ class StatsScreen extends ConsumerWidget {
                 _Header(
                   month: month,
                   range: range,
+                  net: data.net,
+                  currency: data.currency,
                   canGoPrevious: canGoPrevious,
                   canGoNext: canGoNext,
                   onPrevious: canGoPrevious
@@ -250,6 +252,8 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.month,
     required this.range,
+    required this.net,
+    required this.currency,
     required this.canGoPrevious,
     required this.canGoNext,
     required this.onPrevious,
@@ -260,6 +264,8 @@ class _Header extends StatelessWidget {
 
   final DateTime month;
   final DateTimeRange? range;
+  final int net;
+  final String currency;
   final bool canGoPrevious;
   final bool canGoNext;
   final VoidCallback? onPrevious;
@@ -269,54 +275,85 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (range != null) {
-      return Row(
-        children: [
-          IconButton(
-            onPressed: onPickRange,
-            icon: const Icon(Icons.date_range),
-            tooltip: 'Change range',
-          ),
-          Expanded(
-            child: Text(
-              '${formatShortDate(range!.start)} – ${formatShortDate(range!.end)}',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
-          ),
-          IconButton(
-            onPressed: onClearRange,
-            icon: const Icon(Icons.close),
-            tooltip: 'Back to monthly view',
-          ),
-        ],
-      );
-    }
-    return Row(
+    final theme = Theme.of(context);
+    final controls = range != null
+        ? Row(
+            children: [
+              IconButton(
+                onPressed: onPickRange,
+                icon: const Icon(Icons.calendar_month),
+                tooltip: 'Change range',
+              ),
+              Expanded(
+                child: Text(
+                  '${formatShortDate(range!.start)} – ${formatShortDate(range!.end)}',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onClearRange,
+                icon: const Icon(Icons.close),
+                tooltip: 'Back to monthly view',
+              ),
+            ],
+          )
+        : Row(
+            children: [
+              IconButton(
+                onPressed: onPrevious,
+                icon: const Icon(Icons.chevron_left),
+                tooltip: 'Previous month',
+              ),
+              Expanded(
+                child: Text(
+                  formatMonth(month),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right),
+                tooltip: 'Next month',
+              ),
+              IconButton(
+                onPressed: onPickRange,
+                icon: const Icon(Icons.calendar_month),
+                tooltip: 'Choose date range',
+              ),
+            ],
+          );
+    return Column(
       children: [
-        IconButton(
-          onPressed: onPrevious,
-          icon: const Icon(Icons.chevron_left),
-          tooltip: 'Previous month',
-        ),
-        Expanded(
-          child: Text(
-            formatMonth(month),
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w600),
+        controls,
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Total',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                formatMoney(net, currency, signed: true),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: net >= 0
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.error,
+                ),
+              ),
+            ],
           ),
-        ),
-        IconButton(
-          onPressed: onNext,
-          icon: const Icon(Icons.chevron_right),
-          tooltip: 'Next month',
-        ),
-        IconButton(
-          onPressed: onPickRange,
-          icon: const Icon(Icons.date_range),
-          tooltip: 'Choose date range',
         ),
       ],
     );
@@ -340,66 +377,31 @@ class _SummaryCards extends StatelessWidget {
   Widget build(BuildContext context) {
     final income = data.income;
     final expense = -data.expense;
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _BigCard(
-                label: 'Income',
-                amount: income,
-                currency: data.currency,
-                icon: Icons.south_west,
-                color: theme.colorScheme.primary,
-                background: theme.colorScheme.primaryContainer,
-                selected: type == StatsType.income,
-                onTap: () => onTypeChanged(StatsType.income),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _BigCard(
-                label: 'Expenses',
-                amount: expense,
-                currency: data.currency,
-                icon: Icons.north_east,
-                color: theme.colorScheme.error,
-                background: theme.colorScheme.errorContainer,
-                selected: type == StatsType.expense,
-                onTap: () => onTypeChanged(StatsType.expense),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(16),
+        Expanded(
+          child: _BigCard(
+            label: 'Income',
+            amount: income,
+            currency: data.currency,
+            icon: Icons.south_west,
+            color: theme.colorScheme.primary,
+            background: theme.colorScheme.primaryContainer,
+            selected: type == StatsType.income,
+            onTap: () => onTypeChanged(StatsType.income),
           ),
-          child: Row(
-            children: [
-              Icon(
-                data.net >= 0 ? Icons.trending_up : Icons.trending_down,
-                color: data.net >= 0
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.error,
-              ),
-              const SizedBox(width: 10),
-              Text('Net', style: theme.textTheme.titleSmall),
-              const Spacer(),
-              Text(
-                formatMoney(data.net, data.currency, signed: true),
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: data.net >= 0
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.error,
-                ),
-              ),
-            ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _BigCard(
+            label: 'Expenses',
+            amount: expense,
+            currency: data.currency,
+            icon: Icons.north_east,
+            color: theme.colorScheme.error,
+            background: theme.colorScheme.errorContainer,
+            selected: type == StatsType.expense,
+            onTap: () => onTypeChanged(StatsType.expense),
           ),
         ),
       ],
