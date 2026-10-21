@@ -13,6 +13,11 @@ class AppPreferences {
   static const _dynamicColor = 'dynamic_color';
   static const _lastBackupAt = 'last_backup_at';
   static const _lastBackupName = 'last_backup_name';
+  static const _autoBackupEnabled = 'auto_backup_enabled';
+  static const _autoBackupPeriod = 'auto_backup_period';
+  static const _autoBackupFolder = 'auto_backup_folder';
+  static const _lastAutoBackupAt = 'last_auto_backup_at';
+  static const _lastAutoBackupName = 'last_auto_backup_name';
   static const _currencyDecimals = 'currency_decimals';
   static const _decimalSeparator = 'decimal_separator';
   static const _groupSeparator = 'group_separator';
@@ -84,6 +89,39 @@ class AppPreferences {
     await _prefs.setInt(_lastBackupAt, DateTime.now().millisecondsSinceEpoch);
     await _prefs.setString(_lastBackupName, name);
   }
+
+  bool get autoBackupEnabled => _prefs.getBool(_autoBackupEnabled) ?? false;
+  set autoBackupEnabled(bool value) =>
+      _prefs.setBool(_autoBackupEnabled, value);
+
+  String get autoBackupPeriod =>
+      _prefs.getString(_autoBackupPeriod) ?? 'weekly';
+  set autoBackupPeriod(String value) =>
+      _prefs.setString(_autoBackupPeriod, value);
+
+  String? get autoBackupFolder => _prefs.getString(_autoBackupFolder);
+  set autoBackupFolder(String? value) {
+    if (value == null) {
+      _prefs.remove(_autoBackupFolder);
+    } else {
+      _prefs.setString(_autoBackupFolder, value);
+    }
+  }
+
+  DateTime? get lastAutoBackupAt {
+    final value = _prefs.getInt(_lastAutoBackupAt);
+    return value == null ? null : DateTime.fromMillisecondsSinceEpoch(value);
+  }
+
+  String? get lastAutoBackupName => _prefs.getString(_lastAutoBackupName);
+
+  Future<void> recordAutoBackup(String name) async {
+    await _prefs.setInt(
+      _lastAutoBackupAt,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    await _prefs.setString(_lastAutoBackupName, name);
+  }
 }
 
 class AppSettings {
@@ -111,15 +149,14 @@ class AppSettings {
     bool clearCurrencyDecimals = false,
     String? decimalSeparator,
     String? groupSeparator,
-  }) =>
-      AppSettings(
-        homeCurrency: homeCurrency ?? this.homeCurrency,
-        themeMode: themeMode ?? this.themeMode,
-        dynamicColor: dynamicColor ?? this.dynamicColor,
-        currencyDecimals: clearCurrencyDecimals
-            ? null
-            : (currencyDecimals ?? this.currencyDecimals),
-        decimalSeparator: decimalSeparator ?? this.decimalSeparator,
-        groupSeparator: groupSeparator ?? this.groupSeparator,
-      );
+  }) => AppSettings(
+    homeCurrency: homeCurrency ?? this.homeCurrency,
+    themeMode: themeMode ?? this.themeMode,
+    dynamicColor: dynamicColor ?? this.dynamicColor,
+    currencyDecimals: clearCurrencyDecimals
+        ? null
+        : (currencyDecimals ?? this.currencyDecimals),
+    decimalSeparator: decimalSeparator ?? this.decimalSeparator,
+    groupSeparator: groupSeparator ?? this.groupSeparator,
+  );
 }

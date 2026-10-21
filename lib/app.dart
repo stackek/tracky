@@ -37,30 +37,38 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, navigationShell) =>
             HomeShell(navigationShell: navigationShell),
         branches: [
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/transactions',
-              builder: (context, state) => const TransactionsScreen(),
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/accounts',
-              builder: (context, state) => const AccountsScreen(),
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/stats',
-              builder: (context, state) => const StatsScreen(),
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/more',
-              builder: (context, state) => const MoreScreen(),
-            ),
-          ]),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/transactions',
+                builder: (context, state) => const TransactionsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/accounts',
+                builder: (context, state) => const AccountsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/stats',
+                builder: (context, state) => const StatsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/more',
+                builder: (context, state) => const MoreScreen(),
+              ),
+            ],
+          ),
         ],
       ),
       GoRoute(
@@ -68,7 +76,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => TransactionEditorScreen(
           transactionId: int.tryParse(state.uri.queryParameters['tx'] ?? ''),
           initialType: state.uri.queryParameters['type'],
-          initialAccountId: int.tryParse(state.uri.queryParameters['account'] ?? ''),
+          initialAccountId: int.tryParse(
+            state.uri.queryParameters['account'] ?? '',
+          ),
         ),
       ),
       GoRoute(
@@ -89,7 +99,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/category/edit',
         builder: (context, state) => CategoryEditorScreen(
           categoryId: int.tryParse(state.uri.queryParameters['id'] ?? ''),
-          initialType: int.tryParse(state.uri.queryParameters['type'] ?? '') ?? 1,
+          initialType:
+              int.tryParse(state.uri.queryParameters['type'] ?? '') ?? 1,
         ),
       ),
       GoRoute(
@@ -100,10 +111,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/methods',
         builder: (context, state) => const PaymentMethodsScreen(),
       ),
-      GoRoute(
-        path: '/tags',
-        builder: (context, state) => const TagsScreen(),
-      ),
+      GoRoute(path: '/tags', builder: (context, state) => const TagsScreen()),
       GoRoute(
         path: '/budgets',
         builder: (context, state) => const BudgetsScreen(),
@@ -138,11 +146,43 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class MyExpensesApp extends ConsumerWidget {
+class MyExpensesApp extends ConsumerStatefulWidget {
   const MyExpensesApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyExpensesApp> createState() => _MyExpensesAppState();
+}
+
+class _MyExpensesAppState extends ConsumerState<MyExpensesApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runAutoBackup());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _runAutoBackup();
+  }
+
+  Future<void> _runAutoBackup() async {
+    try {
+      await ref.read(autoBackupServiceProvider).runIfDue();
+    } catch (_) {
+      // Automatic backups should never prevent the app from starting.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final router = ref.watch(routerProvider);
     return MaterialApp.router(

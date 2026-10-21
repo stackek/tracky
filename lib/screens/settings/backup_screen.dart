@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/dates.dart';
+import '../../data/auto_backup_service.dart';
 import '../../data/csv_service.dart';
 import '../../providers.dart';
 import 'backup_helpers.dart';
@@ -104,6 +105,78 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
           ),
           const Divider(height: 28),
           Text(
+            'Automatic backup',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.schedule),
+            title: const Text('Back up automatically'),
+            subtitle: const Text(
+              'Saves an unencrypted backup to the selected folder in the '
+              'background when the app starts.',
+            ),
+            value: prefs.autoBackupEnabled,
+            onChanged: (value) async {
+              if (value &&
+                  (prefs.autoBackupFolder == null ||
+                      prefs.autoBackupFolder!.isEmpty)) {
+                await _pickAutoBackupFolder();
+                if (!mounted) return;
+                if (prefs.autoBackupFolder == null ||
+                    prefs.autoBackupFolder!.isEmpty) {
+                  return;
+                }
+              }
+              prefs.autoBackupEnabled = value;
+              if (mounted) setState(() {});
+            },
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.folder_outlined),
+            title: const Text('Backup folder'),
+            subtitle: Text(
+              prefs.autoBackupFolder == null || prefs.autoBackupFolder!.isEmpty
+                  ? 'Not selected'
+                  : prefs.autoBackupFolder!,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _pickAutoBackupFolder,
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.event_repeat),
+            title: const Text('Backup period'),
+            subtitle: Text(
+              AutoBackupPeriodInfo.parse(prefs.autoBackupPeriod).label,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _pickAutoBackupPeriod,
+          ),
+          if (prefs.lastAutoBackupAt != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Last automatic backup: '
+                '${formatDateTime(prefs.lastAutoBackupAt!)}'
+                '${prefs.lastAutoBackupName == null ? '' : ' • ${prefs.lastAutoBackupName}'}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.play_circle_outline),
+            title: const Text('Run automatic backup now'),
+            onTap: _runAutoBackupNow,
+          ),
+          const Divider(height: 28),
+          Text(
             'Restore',
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
@@ -151,6 +224,54 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _pickAutoBackupFolder() async {
+    final path = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Choose backup folder',
+      initialDirectory: ref.read(preferencesProvider).autoBackupFolder,
+    );
+    if (path == null || !mounted) return;
+    ref.read(preferencesProvider).autoBackupFolder = path;
+    setState(() {});
+  }
+
+  Future<void> _pickAutoBackupPeriod() async {
+    final prefs = ref.read(preferencesProvider);
+    final current = AutoBackupPeriodInfo.parse(prefs.autoBackupPeriod);
+    final result = await showModalBottomSheet<AutoBackupPeriod>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final period in AutoBackupPeriod.values)
+              ListTile(
+                leading: const Icon(Icons.event_repeat),
+                title: Text(period.label),
+                trailing: current == period ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.of(context).pop(period),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    prefs.autoBackupPeriod = result.name;
+    setState(() {});
+  }
+
+  Future<void> _runAutoBackupNow() async {
+    final result = await runWithProgress<File>(
+      context,
+      'Creating automatic backup…',
+      () => ref.read(autoBackupServiceProvider).runNow(),
+    );
+    if (result == null || !mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Backup saved to ${result.path}')));
   }
 
   Future<void> _createBackup({required bool encrypted}) async {
@@ -211,16 +332,12 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         dialogTitle: 'Save backup',
       );
       if (uri != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Backup saved.')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Backup saved.')));
       }
     } else if (action == 'share') {
       await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          subject: 'My Expenses backup',
-        ),
+        ShareParams(files: [XFile(file.path)], subject: 'My Expenses backup'),
       );
     }
   }
@@ -282,9 +399,8 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       dialogTitle: 'Save CSV',
     );
     if (uri != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('CSV exported.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('CSV exported.')));
     }
   }
 

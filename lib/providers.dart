@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/currency.dart';
 import 'core/prefs.dart';
+import 'data/auto_backup_service.dart';
 import 'data/backup_service.dart';
 import 'data/database.dart';
 import 'data/repository.dart';
@@ -23,11 +24,20 @@ final repositoryProvider = Provider<Repository>(
   (ref) => Repository(ref.watch(databaseProvider)),
 );
 
-final backupServiceProvider = Provider<BackupService>((ref) => BackupService(
-      database: ref.watch(databaseProvider),
-      repository: ref.watch(repositoryProvider),
-      preferences: ref.watch(preferencesProvider),
-    ));
+final backupServiceProvider = Provider<BackupService>(
+  (ref) => BackupService(
+    database: ref.watch(databaseProvider),
+    repository: ref.watch(repositoryProvider),
+    preferences: ref.watch(preferencesProvider),
+  ),
+);
+
+final autoBackupServiceProvider = Provider<AutoBackupService>(
+  (ref) => AutoBackupService(
+    preferences: ref.watch(preferencesProvider),
+    backupService: ref.watch(backupServiceProvider),
+  ),
+);
 
 class SettingsNotifier extends Notifier<AppSettings> {
   @override
@@ -89,8 +99,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 }
 
-final settingsProvider =
-    NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
+  SettingsNotifier.new,
+);
 
 class TransactionFilterNotifier extends Notifier<TransactionFilter> {
   @override
@@ -119,11 +130,7 @@ class TransactionFilterNotifier extends Notifier<TransactionFilter> {
   void setDates(DateTime? from, DateTime? to) {
     state = from == null && to == null
         ? state.copyWith(clearDates: true)
-        : state.copyWith(
-            from: from,
-            to: to,
-            period: TransactionPeriod.custom,
-          );
+        : state.copyWith(from: from, to: to, period: TransactionPeriod.custom);
   }
 
   void setPeriod(TransactionPeriod period) {
@@ -138,8 +145,8 @@ class TransactionFilterNotifier extends Notifier<TransactionFilter> {
 
 final transactionFilterProvider =
     NotifierProvider<TransactionFilterNotifier, TransactionFilter>(
-  TransactionFilterNotifier.new,
-);
+      TransactionFilterNotifier.new,
+    );
 
 class StatsMonthNotifier extends Notifier<DateTime> {
   @override
@@ -150,8 +157,9 @@ class StatsMonthNotifier extends Notifier<DateTime> {
   void set(DateTime value) => state = DateTime(value.year, value.month, 1);
 }
 
-final statsMonthProvider =
-    NotifierProvider<StatsMonthNotifier, DateTime>(StatsMonthNotifier.new);
+final statsMonthProvider = NotifierProvider<StatsMonthNotifier, DateTime>(
+  StatsMonthNotifier.new,
+);
 
 class StatsTypeNotifier extends Notifier<StatsType> {
   @override
@@ -160,8 +168,9 @@ class StatsTypeNotifier extends Notifier<StatsType> {
   void set(StatsType value) => state = value;
 }
 
-final statsTypeProvider =
-    NotifierProvider<StatsTypeNotifier, StatsType>(StatsTypeNotifier.new);
+final statsTypeProvider = NotifierProvider<StatsTypeNotifier, StatsType>(
+  StatsTypeNotifier.new,
+);
 
 class StatsAccountNotifier extends Notifier<int?> {
   @override
@@ -170,8 +179,9 @@ class StatsAccountNotifier extends Notifier<int?> {
   void set(int? value) => state = value;
 }
 
-final statsAccountProvider =
-    NotifierProvider<StatsAccountNotifier, int?>(StatsAccountNotifier.new);
+final statsAccountProvider = NotifierProvider<StatsAccountNotifier, int?>(
+  StatsAccountNotifier.new,
+);
 
 class StatsRangeNotifier extends Notifier<DateTimeRange?> {
   @override
@@ -180,8 +190,9 @@ class StatsRangeNotifier extends Notifier<DateTimeRange?> {
   void set(DateTimeRange? value) => state = value;
 }
 
-final statsRangeProvider =
-    NotifierProvider<StatsRangeNotifier, DateTimeRange?>(StatsRangeNotifier.new);
+final statsRangeProvider = NotifierProvider<StatsRangeNotifier, DateTimeRange?>(
+  StatsRangeNotifier.new,
+);
 
 final accountsProvider = FutureProvider<List<Account>>(
   (ref) => ref.watch(repositoryProvider).accounts(),
@@ -227,7 +238,9 @@ final transactionsProvider = FutureProvider<List<Transaction>>((ref) {
 final periodTotalsProvider = FutureProvider<PeriodTotals>((ref) {
   final filter = ref.watch(transactionFilterProvider);
   final settings = ref.watch(settingsProvider);
-  return ref.watch(repositoryProvider).periodTotals(
+  return ref
+      .watch(repositoryProvider)
+      .periodTotals(
         accountId: filter.accountId,
         from: filter.effectiveFrom,
         to: filter.effectiveTo,
@@ -238,7 +251,9 @@ final periodTotalsProvider = FutureProvider<PeriodTotals>((ref) {
 final topCategoryProvider = FutureProvider<CategoryTotal?>((ref) {
   final filter = ref.watch(transactionFilterProvider);
   final settings = ref.watch(settingsProvider);
-  return ref.watch(repositoryProvider).topCategorySpending(
+  return ref
+      .watch(repositoryProvider)
+      .topCategorySpending(
         accountId: filter.accountId,
         from: filter.effectiveFrom,
         to: filter.effectiveTo,
@@ -256,9 +271,10 @@ final splitChildrenProvider = FutureProvider.family<List<Transaction>, int>(
 
 final transactionAttachmentsProvider =
     FutureProvider.family<List<Attachment>, int>(
-  (ref, transactionId) =>
-      ref.watch(repositoryProvider).attachmentsForTransaction(transactionId),
-);
+      (ref, transactionId) => ref
+          .watch(repositoryProvider)
+          .attachmentsForTransaction(transactionId),
+    );
 
 final earliestTransactionDateProvider = FutureProvider<DateTime?>(
   (ref) => ref.watch(repositoryProvider).earliestTransactionDate(),
@@ -270,7 +286,9 @@ final statsProvider = FutureProvider<StatsData>((ref) {
   final range = ref.watch(statsRangeProvider);
   final type = ref.watch(statsTypeProvider);
   final settings = ref.watch(settingsProvider);
-  return ref.watch(repositoryProvider).stats(
+  return ref
+      .watch(repositoryProvider)
+      .stats(
         accountId: accountId,
         month: month,
         rangeFrom: range?.start,
@@ -304,12 +322,14 @@ class BudgetPeriod {
 
 final budgetAllocationsProvider =
     FutureProvider.family<List<BudgetAllocation>, BudgetPeriod>(
-  (ref, period) => ref.watch(repositoryProvider).budgetAllocations(
-        budgetId: period.budgetId,
-        year: period.year,
-        month: period.month,
-      ),
-);
+      (ref, period) => ref
+          .watch(repositoryProvider)
+          .budgetAllocations(
+            budgetId: period.budgetId,
+            year: period.year,
+            month: period.month,
+          ),
+    );
 
 final templatesProvider = FutureProvider<List<Template>>(
   (ref) => ref.watch(repositoryProvider).templates(),
