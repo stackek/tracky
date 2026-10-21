@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/currency.dart';
 import '../../core/dates.dart';
 import '../../core/icons.dart';
+import '../../core/ui_utils.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
@@ -22,6 +24,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
   bool _showSearch = false;
+  final Set<int> _selectedIds = {};
+  bool get _selectionMode => _selectedIds.isNotEmpty;
 
   @override
   void dispose() {
@@ -52,9 +56,23 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               ? 0
               : (account.balance * (rates[account.currency] ?? 1)).round()),
     );
-    final headerBalance = selectedAccount?.balance ?? totalHome;
     final headerCurrency = selectedAccount?.currency ?? settings.homeCurrency;
-    final headerLabel = selectedAccount?.label ?? 'All accounts';
+    final allItems = transactions.value ?? const <Transaction>[];
+    final selectedItems = allItems
+        .where((item) => _selectedIds.contains(item.id))
+        .toList();
+    final selectedTotal = selectedItems.fold<int>(0, (sum, item) {
+      final rate = item.currency == headerCurrency
+          ? 1.0
+          : rates[item.currency] ?? 1.0;
+      return sum + (item.amount * rate).round();
+    });
+    final headerBalance = _selectionMode
+        ? selectedTotal
+        : (selectedAccount?.balance ?? totalHome);
+    final headerLabel = _selectionMode
+        ? '${selectedItems.length} selected'
+        : (selectedAccount?.label ?? 'All accounts');
     final periodLabel = filter.period == TransactionPeriod.custom
         ? '${filter.from == null ? '' : formatShortDate(filter.from!)}'
               '${filter.to == null ? '' : ' – ${formatShortDate(filter.to!)}'}'
@@ -64,7 +82,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       appBar: AppBar(
         title: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _showFundsSheet(context, selectedAccount),
+          onTap: _selectionMode
+              ? null
+              : () => _showFundsSheet(context, selectedAccount),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
             child: Column(
@@ -92,9 +112,45 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             ),
           ),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Search',
+        actions: _selectionMode
+            ? [
+                IconButton(
+                  tooltip: 'Clear selection',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(_selectedIds.clear),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Actions',
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      _deleteSelected();
+                    } else if (value == 'remap') {
+                      _showRemapSheet(context);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'remap',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Remap'),
+                      ),
+                    ),
+                  ],
+                ),
+              ]
+            : [
+                IconButton(
+                  tooltip: 'Search',
             icon: Icon(_showSearch ? Icons.close : Icons.search),
             onPressed: () {
               final show = !_showSearch;
@@ -110,21 +166,21 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               }
             },
           ),
-          IconButton(
-            tooltip: 'Filter',
-            icon: Badge(
-              isLabelVisible:
-                  filter.categoryId != null ||
-                  filter.payeeId != null ||
-                  filter.from != null ||
-                  filter.includeArchived,
-              child: const Icon(Icons.tune),
-            ),
-            onPressed: () => _showFilterSheet(context),
-          ),
-        ],
+                IconButton(
+                  tooltip: 'Filter',
+                  icon: Badge(
+                    isLabelVisible:
+                        filter.categoryId != null ||
+                        filter.payeeId != null ||
+                        filter.from != null ||
+                        filter.includeArchived,
+                    child: const Icon(Icons.tune),
+                  ),
+                  onPressed: () => _showFilterSheet(context),
+                ),
+              ],
       ),
-      floatingActionButton: accounts.isEmpty
+      floatingActionButton: accounts.isEmpty || _selectionMode
           ? null
           : FloatingActionButton.extended(
               onPressed: () {
@@ -191,6 +247,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                             : periodLabel,
                         periodTotals: periodTotals,
                         topCategory: topCategory,
+                        selectedIds: _selectedIds,
+                        onToggleSelection: (id) => setState(() {
+                          if (!_selectedIds.remove(id)) {
+                            _selectedIds.add(id);
+                          }
+                        }),
                         onRefresh: () async =>
                             ref.invalidate(transactionsProvider),
                       ),
@@ -211,6 +273,442 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               ),
             ),
     );
+  }
+
+  Future<void> _deleteSelected() async {
+    final ids = Set<int>.from(_selectedIds);
+    if (ids.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${ids.length} transactions?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final repo = ref.read(repositoryProvider);
+    for (final id in ids) {
+      await repo.deleteTransaction(id);
+    }
+    if (!mounted) return;
+    setState(_selectedIds.clear);
+    invalidateTransactionData(ref);
+  }
+
+  Future<void> _showRemapSheet(BuildContext context) async {
+    if (_selectedIds.isEmpty) return;
+    final accounts =
+        (await ref.read(repositoryProvider).activeAccounts());
+    if (!context.mounted) return;
+    final payees = ref.read(payeesProvider).value ?? const <Payee>[];
+    final methods =
+        ref.read(paymentMethodsProvider).value ?? const <PaymentMethod>[];
+    final categories =
+        ref.read(categoriesProvider).value ?? const <Category>[];
+    final settings = ref.read(settingsProvider);
+    final home = settings.homeCurrency;
+    int? accountId;
+    int? categoryId;
+    var clearCategory = false;
+    int? payeeId;
+    var clearPayee = false;
+    int? methodId;
+    var clearMethod = false;
+    DateTime? date;
+    String? status;
+    var clearComment = false;
+    final noteController = TextEditingController();
+    final amountController = TextEditingController();
+    var applied = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          String labelForAccount() {
+            if (accountId == null) return 'Leave unchanged';
+            return accounts
+                    .where((account) => account.id == accountId)
+                    .firstOrNull
+                    ?.label ??
+                'Leave unchanged';
+          }
+
+          String labelForCategory() {
+            if (clearCategory) return 'Clear category';
+            if (categoryId == null) return 'Leave unchanged';
+            return categories
+                    .where((category) => category.id == categoryId)
+                    .firstOrNull
+                    ?.displayPath ??
+                'Leave unchanged';
+          }
+
+          String labelForPayee() {
+            if (clearPayee) return 'Clear payee';
+            if (payeeId == null) return 'Leave unchanged';
+            return payees
+                    .where((payee) => payee.id == payeeId)
+                    .firstOrNull
+                    ?.name ??
+                'Leave unchanged';
+          }
+
+          String labelForMethod() {
+            if (clearMethod) return 'Clear payment method';
+            if (methodId == null) return 'Leave unchanged';
+            return methods
+                    .where((method) => method.id == methodId)
+                    .firstOrNull
+                    ?.displayName ??
+                'Leave unchanged';
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              0,
+              20,
+              MediaQuery.viewInsetsOf(context).bottom + 24,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Remap ${_selectedIds.length} transactions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.account_balance_wallet_outlined),
+                    title: const Text('Account'),
+                    subtitle: Text(labelForAccount()),
+                    onTap: () async {
+                      final value = await showSearchPicker<int>(
+                        context: context,
+                        title: 'Account',
+                        hint: 'Search accounts',
+                        selected: accountId ?? -1,
+                        allowNone: true,
+                        noneValue: -1,
+                        noneLabel: 'Leave unchanged',
+                        entries: [
+                          for (final account in accounts)
+                            PickerEntry(
+                              value: account.id,
+                              label: account.label,
+                              subtitle: account.currency,
+                              icon: iconForAccountType(account.type),
+                            ),
+                        ],
+                      );
+                      if (value == null) return;
+                      setSheetState(
+                        () => accountId = value == -1 ? null : value,
+                      );
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.category_outlined),
+                    title: const Text('Category'),
+                    subtitle: Text(labelForCategory()),
+                    onTap: () async {
+                      final value = await showSearchPicker<int>(
+                        context: context,
+                        title: 'Category',
+                        hint: 'Search categories',
+                        selected: clearCategory ? -2 : (categoryId ?? -1),
+                        entries: [
+                          const PickerEntry(
+                            value: -1,
+                            label: 'Leave unchanged',
+                            icon: Icons.remove_circle_outline,
+                          ),
+                          const PickerEntry(
+                            value: -2,
+                            label: 'Clear category',
+                            icon: Icons.block,
+                          ),
+                          for (final category in categories)
+                            PickerEntry(
+                              value: category.id,
+                              label: category.displayPath,
+                              icon: iconForCategory(category.icon),
+                              color: colorFromDb(category.color),
+                            ),
+                        ],
+                      );
+                      if (value == null) return;
+                      setSheetState(() {
+                        if (value == -1) {
+                          categoryId = null;
+                          clearCategory = false;
+                        } else if (value == -2) {
+                          categoryId = null;
+                          clearCategory = true;
+                        } else {
+                          categoryId = value;
+                          clearCategory = false;
+                        }
+                      });
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_outline),
+                    title: const Text('Payee'),
+                    subtitle: Text(labelForPayee()),
+                    onTap: () async {
+                      final value = await showSearchPicker<int>(
+                        context: context,
+                        title: 'Payee',
+                        hint: 'Search payees',
+                        selected: clearPayee ? -2 : (payeeId ?? -1),
+                        entries: [
+                          const PickerEntry(
+                            value: -1,
+                            label: 'Leave unchanged',
+                            icon: Icons.remove_circle_outline,
+                          ),
+                          const PickerEntry(
+                            value: -2,
+                            label: 'Clear payee',
+                            icon: Icons.block,
+                          ),
+                          for (final payee in payees)
+                            PickerEntry(
+                              value: payee.id,
+                              label: payee.name,
+                              subtitle: payee.iban,
+                              icon: Icons.person_outline,
+                            ),
+                        ],
+                      );
+                      if (value == null) return;
+                      setSheetState(() {
+                        if (value == -1) {
+                          payeeId = null;
+                          clearPayee = false;
+                        } else if (value == -2) {
+                          payeeId = null;
+                          clearPayee = true;
+                        } else {
+                          payeeId = value;
+                          clearPayee = false;
+                        }
+                      });
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.payment),
+                    title: const Text('Payment method'),
+                    subtitle: Text(labelForMethod()),
+                    onTap: () async {
+                      final value = await showSearchPicker<int>(
+                        context: context,
+                        title: 'Payment method',
+                        hint: 'Search payment methods',
+                        selected: clearMethod ? -2 : (methodId ?? -1),
+                        entries: [
+                          const PickerEntry(
+                            value: -1,
+                            label: 'Leave unchanged',
+                            icon: Icons.remove_circle_outline,
+                          ),
+                          const PickerEntry(
+                            value: -2,
+                            label: 'Clear payment method',
+                            icon: Icons.block,
+                          ),
+                          for (final method in methods)
+                            PickerEntry(
+                              value: method.id,
+                              label: method.displayName,
+                              icon: iconForPaymentMethod(method.icon),
+                            ),
+                        ],
+                      );
+                      if (value == null) return;
+                      setSheetState(() {
+                        if (value == -1) {
+                          methodId = null;
+                          clearMethod = false;
+                        } else if (value == -2) {
+                          methodId = null;
+                          clearMethod = true;
+                        } else {
+                          methodId = value;
+                          clearMethod = false;
+                        }
+                      });
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.event),
+                    title: const Text('Date'),
+                    subtitle: Text(
+                      date == null ? 'Leave unchanged' : formatShortDate(date!),
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: date ?? DateTime.now(),
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) setSheetState(() => date = picked);
+                    },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.check_circle_outline),
+                    title: const Text('Status'),
+                    subtitle: Text(status ?? 'Leave unchanged'),
+                    onTap: () async {
+                      final value = await showActionSheet<String>(
+                        context,
+                        title: 'Status',
+                        actions: const [
+                          SheetAction(
+                            value: 'KEEP',
+                            label: 'Leave unchanged',
+                            icon: Icons.remove_circle_outline,
+                          ),
+                          SheetAction(
+                            value: 'UNRECONCILED',
+                            label: 'Unreconciled',
+                            icon: Icons.radio_button_unchecked,
+                          ),
+                          SheetAction(
+                            value: 'CLEARED',
+                            label: 'Cleared',
+                            icon: Icons.check_circle_outline,
+                          ),
+                          SheetAction(
+                            value: 'RECONCILED',
+                            label: 'Reconciled',
+                            icon: Icons.verified_outlined,
+                          ),
+                          SheetAction(
+                            value: 'VOID',
+                            label: 'Void',
+                            icon: Icons.cancel_outlined,
+                          ),
+                        ],
+                      );
+                      if (value == null) return;
+                      setSheetState(
+                        () => status = value == 'KEEP' ? null : value,
+                      );
+                    },
+                  ),
+                  TextField(
+                    controller: noteController,
+                    decoration: const InputDecoration(
+                      labelText: 'Note',
+                      helperText: 'Leave empty to keep existing notes',
+                    ),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Clear notes'),
+                    value: clearComment,
+                    onChanged: (value) =>
+                        setSheetState(() => clearComment = value ?? false),
+                  ),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Amount',
+                      helperText:
+                          'Leave empty to keep amounts. Applied per '
+                          'transaction in its own currency.',
+                      suffixText: home,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () async {
+                            final amount = amountController.text.trim().isEmpty
+                                ? null
+                                : parseAmountToMinor(
+                                    amountController.text,
+                                    home,
+                                  );
+                            await ref
+                                .read(repositoryProvider)
+                                .remapTransactions(
+                                  _selectedIds,
+                                  accountId: accountId,
+                                  categoryId: categoryId,
+                                  clearCategory: clearCategory,
+                                  payeeId: payeeId,
+                                  clearPayee: clearPayee,
+                                  methodId: methodId,
+                                  clearMethod: clearMethod,
+                                  date: date,
+                                  crStatus: status,
+                                  comment: noteController.text.trim().isEmpty
+                                      ? null
+                                      : noteController.text.trim(),
+                                  clearComment: clearComment,
+                                  amount: amount,
+                                );
+                            if (!context.mounted) return;
+                            applied = true;
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text('Apply'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (mounted && applied) {
+      setState(_selectedIds.clear);
+      invalidateTransactionData(ref);
+    }
+    disposeAfterDialog([noteController, amountController]);
   }
 
   Future<void> _showFundsSheet(
@@ -663,6 +1161,8 @@ class _TransactionList extends ConsumerWidget {
     required this.periodLabel,
     required this.periodTotals,
     required this.topCategory,
+    required this.selectedIds,
+    required this.onToggleSelection,
     required this.onRefresh,
   });
 
@@ -671,6 +1171,8 @@ class _TransactionList extends ConsumerWidget {
   final String periodLabel;
   final PeriodTotals? periodTotals;
   final CategoryTotal? topCategory;
+  final Set<int> selectedIds;
+  final ValueChanged<int> onToggleSelection;
   final Future<void> Function() onRefresh;
 
   @override
@@ -735,10 +1237,16 @@ class _TransactionList extends ConsumerWidget {
             SliverToBoxAdapter(child: _DayHeader(date: DateTime.parse(key))),
             SliverList.builder(
               itemCount: grouped[key]!.length,
-              itemBuilder: (context, index) => _TransactionTile(
-                transaction: grouped[key]![index],
-                accountColor: accountColors[grouped[key]![index].accountId],
-              ),
+              itemBuilder: (context, index) {
+                final transaction = grouped[key]![index];
+                return _TransactionTile(
+                  transaction: transaction,
+                  accountColor: accountColors[transaction.accountId],
+                  selectionMode: selectedIds.isNotEmpty,
+                  selected: selectedIds.contains(transaction.id),
+                  onToggleSelection: () => onToggleSelection(transaction.id),
+                );
+              },
             ),
           ],
           const SliverToBoxAdapter(child: SizedBox(height: 96)),
@@ -930,10 +1438,19 @@ class _DayHeader extends StatelessWidget {
 }
 
 class _TransactionTile extends ConsumerWidget {
-  const _TransactionTile({required this.transaction, this.accountColor});
+  const _TransactionTile({
+    required this.transaction,
+    this.accountColor,
+    required this.selectionMode,
+    required this.selected,
+    required this.onToggleSelection,
+  });
 
   final Transaction transaction;
   final int? accountColor;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onToggleSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -999,16 +1516,27 @@ class _TransactionTile extends ConsumerWidget {
         }
       },
       child: ListTile(
-        onTap: () => context.push('/edit?tx=${transaction.id}'),
+        selected: selected,
+        selectedTileColor: theme.colorScheme.primaryContainer.withValues(
+          alpha: 0.35,
+        ),
+        onTap: selectionMode
+            ? onToggleSelection
+            : () => context.push('/edit?tx=${transaction.id}'),
+        onLongPress: onToggleSelection,
         leading: CircleAvatar(
           backgroundColor: isTransfer
               ? theme.colorScheme.tertiaryContainer
               : categoryColor.withValues(alpha: 0.18),
           child: Icon(
-            isTransfer
+            selected
+                ? Icons.check
+                : isTransfer
                 ? Icons.swap_horiz
                 : iconForCategory(transaction.categoryIcon),
-            color: isTransfer
+            color: selected
+                ? theme.colorScheme.primary
+                : isTransfer
                 ? theme.colorScheme.onTertiaryContainer
                 : categoryColor,
           ),

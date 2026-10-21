@@ -744,6 +744,145 @@ extension TransactionRepository on Repository {
     return sourceId;
   }
 
+  Future<int> remapTransactions(
+    Iterable<int> ids, {
+    int? accountId,
+    int? categoryId,
+    bool clearCategory = false,
+    int? payeeId,
+    bool clearPayee = false,
+    int? methodId,
+    bool clearMethod = false,
+    DateTime? date,
+    String? crStatus,
+    String? comment,
+    bool clearComment = false,
+    int? amount,
+  }) async {
+    var updated = 0;
+    await db.transaction((txn) async {
+      for (final id in ids.toSet()) {
+        final rows = await txn.query(
+          'transactions',
+          where: '_id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        if (rows.isEmpty) continue;
+        final row = rows.first;
+        final isTransfer = asInt(row['transfer_peer']) != null;
+        final catId = asInt(row['cat_id']);
+        final isSplit = catId == splitCategoryId;
+        final existingDate = DateTime.fromMillisecondsSinceEpoch(
+          asIntOr(row['date'], 0) * 1000,
+        );
+        final currentAmount = asIntOr(row['amount'], 0);
+        final values = <String, Object?>{};
+        if (accountId != null && !isTransfer) {
+          values['account_id'] = accountId;
+        }
+        if (!isTransfer && !isSplit) {
+          if (categoryId != null) values['cat_id'] = categoryId;
+          if (clearCategory) values['cat_id'] = null;
+        }
+        if (payeeId != null) values['payee_id'] = payeeId;
+        if (clearPayee) values['payee_id'] = null;
+        if (methodId != null) values['method_id'] = methodId;
+        if (clearMethod) values['method_id'] = null;
+        if (date != null) {
+          final valueDate = DateTime(
+            date.year,
+            date.month,
+            date.day,
+            existingDate.hour,
+            existingDate.minute,
+            existingDate.second,
+          );
+          values['date'] = toUnixTimestamp(valueDate);
+          values['value_date'] = toUnixTimestamp(valueDate);
+        }
+        if (crStatus != null) values['cr_status'] = crStatus;
+        if (comment != null) values['comment'] = comment;
+        if (clearComment) values['comment'] = '';
+        if (amount != null && !isTransfer && !isSplit) {
+          final abs = amount.abs();
+          values['amount'] = currentAmount < 0 ? -abs : abs;
+        }
+        if (values.isEmpty) continue;
+        await txn.update(
+          'transactions',
+          values,
+          where: '_id = ?',
+          whereArgs: [id],
+        );
+        updated++;
+        if (isSplit) {
+          final childValues = <String, Object?>{};
+          if (accountId != null) childValues['account_id'] = accountId;
+          if (payeeId != null) childValues['payee_id'] = payeeId;
+          if (clearPayee) childValues['payee_id'] = null;
+          if (methodId != null) childValues['method_id'] = methodId;
+          if (clearMethod) childValues['method_id'] = null;
+          if (date != null) {
+            childValues['date'] = values['date'];
+            childValues['value_date'] = values['value_date'];
+          }
+          if (crStatus != null) childValues['cr_status'] = crStatus;
+          if (comment != null) childValues['comment'] = comment;
+          if (clearComment) childValues['comment'] = '';
+          if (childValues.isNotEmpty) {
+            await txn.update(
+              'transactions',
+              childValues,
+              where: 'parent_id = ?',
+              whereArgs: [id],
+            );
+          }
+        } else if (isTransfer) {
+          final peer = asInt(row['transfer_peer']);
+          if (peer != null) {
+            final peerRows = await txn.query(
+              'transactions',
+              where: '_id = ?',
+              whereArgs: [peer],
+              limit: 1,
+            );
+            if (peerRows.isNotEmpty) {
+              final peerRow = peerRows.first;
+              final peerValues = <String, Object?>{};
+              if (payeeId != null) peerValues['payee_id'] = payeeId;
+              if (clearPayee) peerValues['payee_id'] = null;
+              if (methodId != null) peerValues['method_id'] = methodId;
+              if (clearMethod) peerValues['method_id'] = null;
+              if (date != null) {
+                peerValues['date'] = values['date'];
+                peerValues['value_date'] = values['value_date'];
+              }
+              if (crStatus != null) peerValues['cr_status'] = crStatus;
+              if (comment != null) peerValues['comment'] = comment;
+              if (clearComment) peerValues['comment'] = '';
+              if (amount != null) {
+                final peerAmount = asIntOr(peerRow['amount'], 0);
+                final abs = amount.abs();
+                peerValues['amount'] = peerAmount < 0 ? -abs : abs;
+              }
+              if (peerValues.isNotEmpty) {
+                await txn.update(
+                  'transactions',
+                  peerValues,
+                  where: '_id = ?',
+                  whereArgs: [peer],
+                );
+                updated++;
+              }
+            }
+          }
+        }
+      }
+    });
+    return updated;
+  }
+
   Future<Transaction?> _transactionWithTxn(DatabaseExecutor txn, int id) async {
     final rows = await txn.query(
       'transactions',
