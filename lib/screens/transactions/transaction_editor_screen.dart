@@ -39,6 +39,8 @@ class _TransactionEditorScreenState
   final _targetAmountController = TextEditingController();
   final _commentController = TextEditingController();
   final _numberController = TextEditingController();
+  final _debtRateController = TextEditingController();
+  final _debtAmountController = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -50,6 +52,12 @@ class _TransactionEditorScreenState
   int? _categoryId;
   int? _payeeId;
   int? _methodId;
+  DebtMode _debtMode = DebtMode.none;
+  int? _debtPayeeId;
+  int? _resolveDebtId;
+  Debt? _resolvedDebt;
+  int? _debtAmount;
+  String? _debtCurrency;
   DateTime _date = DateTime.now();
   DateTime _valueDate = DateTime.now();
   String _crStatus = 'UNRECONCILED';
@@ -71,6 +79,8 @@ class _TransactionEditorScreenState
     _targetAmountController.dispose();
     _commentController.dispose();
     _numberController.dispose();
+    _debtRateController.dispose();
+    _debtAmountController.dispose();
     super.dispose();
   }
 
@@ -99,6 +109,33 @@ class _TransactionEditorScreenState
         _crStatus = existing.crStatus;
         _tagIds.addAll(existing.tagIds);
         _attachments.addAll(await repo.attachmentsForTransaction(existing.id));
+        if (!existing.isSplit) {
+          if (existing.debtId != null) {
+            _debtMode = DebtMode.resolve;
+            _resolveDebtId = existing.debtId;
+            _resolvedDebt = await repo.debt(existing.debtId!);
+            if (existing.originalAmount != null &&
+                existing.originalCurrency != null) {
+              _debtAmount = existing.originalAmount;
+              _debtCurrency = existing.originalCurrency;
+            }
+          } else {
+            final debtId = await repo.createdDebtIdForTransaction(existing.id);
+            if (debtId != null) {
+              final debt = await repo.debt(debtId);
+              if (debt != null) {
+                _debtMode = DebtMode.create;
+                _debtPayeeId = debt.payeeId;
+                _debtAmount = -debt.amount;
+                _debtCurrency = debt.currency;
+                _debtAmountController.text = formatMoneyPlain(
+                  debt.amount.abs(),
+                  debt.currency,
+                );
+              }
+            }
+          }
+        }
         if (existing.isTransfer) {
           final peerId = existing.transferPeer;
           final peer = peerId == null ? null : await repo.transaction(peerId);
@@ -146,12 +183,38 @@ class _TransactionEditorScreenState
         if (existing.isSplit) {
           final children = await repo.children(existing.id);
           for (final child in children) {
+            var debtMode = DebtMode.none;
+            int? debtPayeeId;
+            int? resolveDebtId;
+            int? debtAmount;
+            if (child.debtId != null) {
+              debtMode = DebtMode.resolve;
+              resolveDebtId = child.debtId;
+              if (child.originalAmount != null &&
+                  child.originalCurrency != null) {
+                debtAmount = child.originalAmount;
+              }
+            } else {
+              final debtId = await repo.createdDebtIdForTransaction(child.id);
+              if (debtId != null) {
+                final debt = await repo.debt(debtId);
+                if (debt != null) {
+                  debtMode = DebtMode.create;
+                  debtPayeeId = debt.payeeId;
+                  debtAmount = -debt.amount;
+                }
+              }
+            }
             _parts.add(
               SplitDraft(
                 id: child.id,
                 categoryId: child.catId,
                 amount: child.amount,
                 comment: child.comment,
+                debtMode: debtMode,
+                debtPayeeId: debtPayeeId,
+                resolveDebtId: resolveDebtId,
+                debtAmount: debtAmount,
               ),
             );
           }
@@ -172,6 +235,21 @@ class _TransactionEditorScreenState
             ?.id;
       }
       _amountController.text = '';
+    }
+    if (!_splitMode &&
+        _debtMode != DebtMode.none &&
+        _debtAmount != null &&
+        _debtNeedsConversion) {
+      _debtAmountController.text = formatMoneyPlain(
+        _debtAmount!.abs(),
+        _debtCurrency ?? _homeCurrency,
+      );
+      final parsed = parseAmountToMinor(_amountController.text, _currency);
+      if (parsed != null && parsed != 0) {
+        _debtRateController.text = formatRate(
+          _debtAmount!.abs() / parsed.abs(),
+        );
+      }
     }
     if (mounted) {
       setState(() => _loading = false);
@@ -432,6 +510,143 @@ class _TransactionEditorScreenState
             ],
           ),
           const SizedBox(height: 12),
+          if (!_splitMode && _type != DraftType.transfer) ...[
+            _SectionCard(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    Icons.handshake_outlined,
+                    color: _debtMode == DebtMode.none
+                        ? theme.colorScheme.onSurfaceVariant
+                        : theme.colorScheme.primary,
+                  ),
+                  title: const Text('Debt'),
+                  subtitle: Text(_debtSummary),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _pickDebtMode,
+                ),
+                if (_debtMode == DebtMode.create)
+                  ListTile(
+                    leading: Icon(
+                      Icons.person_outline,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    title: const Text('Debt payee'),
+                    subtitle: Text(
+                      _debtPayeeId == null
+                          ? 'Same as transaction payee'
+                          : payees
+                                    .where(
+                                      (payee) => payee.id == _debtPayeeId,
+                                    )
+                                    .firstOrNull
+                                    ?.name ??
+                                'Same as transaction payee',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _pickDebtPayee,
+                  ),
+                if (_debtMode == DebtMode.resolve)
+                  ListTile(
+                    leading: Icon(
+                      Icons.receipt_long_outlined,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    title: const Text('Debt to resolve'),
+                    subtitle: Text(
+                      _resolvedDebt == null
+                          ? 'Choose a debt'
+                          : '${_resolvedDebt!.label} • '
+                                '${formatMoney(_resolvedDebt!.currentBalance, _resolvedDebt!.currency)}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final debt = await _pickDebt();
+                      if (debt == null) return;
+                      setState(() {
+                        _resolveDebtId = debt.id;
+                        _resolvedDebt = debt;
+                      });
+                      await _prepareDebtConversion();
+                    },
+                  ),
+                if (_debtMode != DebtMode.none && _debtNeedsConversion)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Debt amount is kept in $_homeCurrency.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _debtRateController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]'),
+                                  ),
+                                ],
+                                decoration: InputDecoration(
+                                  labelText: 'Exchange rate',
+                                  helperText:
+                                      '1 $_accountCurrency = ? $_homeCurrency',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              tooltip: 'Calculate amount',
+                              icon: const Icon(Icons.south),
+                              onPressed: _calculateDebtAmountFromRate,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _debtAmountController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]'),
+                                  ),
+                                ],
+                                decoration: InputDecoration(
+                                  labelText: 'Amount in $_homeCurrency',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              tooltip: 'Calculate rate',
+                              icon: const Icon(Icons.north),
+                              onPressed: _calculateRateFromDebtAmount,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           if (_splitMode)
             _SplitSection(
               parts: _parts,
@@ -663,130 +878,466 @@ class _TransactionEditorScreenState
 
   Future<SplitDraft?> _editPartDialog({SplitDraft? initial}) async {
     final categories = ref.read(categoriesProvider).value ?? const <Category>[];
+    final payees = ref.read(payeesProvider).value ?? const <Payee>[];
+    final home = _homeCurrency;
     final amountController = TextEditingController(
       text: initial == null
           ? ''
-          : formatMoneyPlain(initial.amount.abs(), _currency) +
-                (initial.amount < 0 ? '' : ''),
+          : formatMoneyPlain(initial.amount.abs(), _currency),
     );
     final commentController = TextEditingController(
       text: initial?.comment ?? '',
     );
+    final rateController = TextEditingController();
+    final homeAmountController = TextEditingController();
     var selectedCategory = initial?.categoryId;
     var expense = initial == null
         ? _type == DraftType.expense
         : initial.amount < 0;
+    var debtMode = initial?.debtMode ?? DebtMode.none;
+    var debtPayeeId = initial?.debtPayeeId;
+    var resolveDebtId = initial?.resolveDebtId;
+    var convertedAmount = initial?.debtAmount;
+    var resolvedDebt = resolveDebtId == null
+        ? null
+        : await ref.read(repositoryProvider).debt(resolveDebtId);
+    if (convertedAmount != null) {
+      homeAmountController.text = formatMoneyPlain(
+        convertedAmount.abs(),
+        home,
+      );
+    }
+    if (initial != null && initial.amount != 0 && _accountCurrency != home) {
+      final rate = (initial.debtAmount ?? 0).abs() / initial.amount.abs();
+      if (rate > 0) rateController.text = formatRate(rate);
+    }
+    var error = '';
+    if (!mounted) return null;
+
     final result = await showDialog<SplitDraft>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(initial == null ? 'Add split part' : 'Edit split part'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: true, label: Text('Expense')),
-                    ButtonSegment(value: false, label: Text('Income')),
-                  ],
-                  selected: {expense},
-                  onSelectionChanged: (value) =>
-                      setDialogState(() => expense = value.first),
+        builder: (context, setDialogState) {
+          final needsConversion = _accountCurrency != home;
+          void calculateAmount() {
+            final rate = double.tryParse(
+              rateController.text.trim().replaceAll(',', '.'),
+            );
+            final parsed =
+                parseAmountToMinor(amountController.text, _currency) ?? 0;
+            if (rate == null || rate <= 0 || parsed == 0) return;
+            final converted = (parsed * rate).round();
+            convertedAmount = expense ? -converted : converted;
+            homeAmountController.text = formatMoneyPlain(converted, home);
+            setDialogState(() => error = '');
+          }
+
+          void calculateRate() {
+            final homeAmount =
+                parseAmountToMinor(homeAmountController.text, home) ?? 0;
+            final parsed =
+                parseAmountToMinor(amountController.text, _currency) ?? 0;
+            if (homeAmount == 0 || parsed == 0) return;
+            rateController.text = formatRate(homeAmount.abs() / parsed.abs());
+            convertedAmount = expense
+                ? -homeAmount.abs()
+                : homeAmount.abs();
+            setDialogState(() => error = '');
+          }
+
+          Future<void> prepareConversion() async {
+            if (!needsConversion || debtMode == DebtMode.none) {
+              convertedAmount = null;
+              homeAmountController.clear();
+              return;
+            }
+            if (rateController.text.trim().isEmpty) {
+              final rates = await ref
+                  .read(repositoryProvider)
+                  .exchangeRatesTo(home);
+              final rate = rates[_accountCurrency];
+              if (rate != null && rate > 0) {
+                rateController.text = formatRate(rate);
+              }
+            }
+            calculateAmount();
+            setDialogState(() {});
+          }
+
+          Future<void> chooseMode() async {
+            final mode = await showActionSheet<DebtMode>(
+              context,
+              title: 'Debt',
+              actions: [
+                const SheetAction(
+                  value: DebtMode.none,
+                  label: 'Not linked',
+                  icon: Icons.link_off,
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: amountController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Amount',
-                    suffixText: _currency,
-                  ),
+                const SheetAction(
+                  value: DebtMode.create,
+                  label: 'Write part to debt',
+                  icon: Icons.add_card,
                 ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    iconForCategory(
-                      categories
-                          .where((category) => category.id == selectedCategory)
-                          .firstOrNull
-                          ?.icon,
+                const SheetAction(
+                  value: DebtMode.resolve,
+                  label: 'Resolve a debt',
+                  icon: Icons.check_circle_outline,
+                ),
+              ],
+            );
+            if (mode == null) return;
+            if (mode == DebtMode.resolve) {
+              final debt = await _pickDebt();
+              if (debt == null) return;
+              setDialogState(() {
+                debtMode = DebtMode.resolve;
+                resolveDebtId = debt.id;
+                resolvedDebt = debt;
+              });
+            } else {
+              setDialogState(() {
+                debtMode = mode;
+                if (mode == DebtMode.create) {
+                  debtPayeeId ??= _payeeId;
+                } else {
+                  resolveDebtId = null;
+                  resolvedDebt = null;
+                }
+              });
+            }
+            await prepareConversion();
+          }
+
+          Future<void> choosePayee() async {
+            final value = await showSearchPicker<int>(
+              context: context,
+              title: 'Debt payee',
+              hint: 'Search payees',
+              selected: debtPayeeId ?? -1,
+              allowNone: true,
+              noneValue: -1,
+              noneLabel: 'Same as transaction payee',
+              entries: [
+                for (final payee in payees)
+                  PickerEntry(
+                    value: payee.id,
+                    label: payee.name,
+                    subtitle: payee.iban,
+                    icon: Icons.person_outline,
+                  ),
+              ],
+            );
+            if (value == null) return;
+            setDialogState(
+              () => debtPayeeId = value == -1 ? null : value,
+            );
+          }
+
+          return AlertDialog(
+            title: Text(initial == null ? 'Add split part' : 'Edit split part'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: true, label: Text('Expense')),
+                      ButtonSegment(value: false, label: Text('Income')),
+                    ],
+                    selected: {expense},
+                    onSelectionChanged: (value) => setDialogState(() {
+                      expense = value.first;
+                      if (convertedAmount != null) {
+                        convertedAmount = expense
+                            ? -convertedAmount!.abs()
+                            : convertedAmount!.abs();
+                      }
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Amount',
+                      suffixText: _currency,
+                    ),
+                    onChanged: (_) {
+                      if (needsConversion && debtMode != DebtMode.none) {
+                        calculateAmount();
+                      }
+                    },
                   ),
-                  title: const Text('Category'),
-                  subtitle: Text(
-                    categories
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      iconForCategory(
+                        categories
                             .where(
                               (category) => category.id == selectedCategory,
                             )
                             .firstOrNull
-                            ?.displayPath ??
-                        'No category',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    final selected = await showCategoryPicker(
-                      context,
+                            ?.icon,
+                      ),
+                    ),
+                    title: const Text('Category'),
+                    subtitle: Text(
                       categories
-                          .where(
-                            (category) =>
-                                category.type == (expense ? 1 : 2) ||
-                                category.type == 0,
-                          )
-                          .toList(),
-                      initialId: selectedCategory,
-                      allowNone: true,
-                    );
-                    if (selected == null) return;
-                    setDialogState(
-                      () => selectedCategory = selected == noCategoryId
-                          ? null
-                          : selected,
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: commentController,
-                  decoration: const InputDecoration(labelText: 'Note'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final parsed = parseAmountToMinor(
-                  amountController.text,
-                  _currency,
-                );
-                if (parsed == null || parsed == 0) return;
-                Navigator.of(context).pop(
-                  SplitDraft(
-                    id: initial?.id,
-                    categoryId: selectedCategory,
-                    amount: expense ? -parsed.abs() : parsed.abs(),
-                    comment: commentController.text.trim(),
+                              .where(
+                                (category) => category.id == selectedCategory,
+                              )
+                              .firstOrNull
+                              ?.displayPath ??
+                          'No category',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final selected = await showCategoryPicker(
+                        context,
+                        categories
+                            .where(
+                              (category) =>
+                                  category.type == (expense ? 1 : 2) ||
+                                  category.type == 0,
+                            )
+                            .toList(),
+                        initialId: selectedCategory,
+                        allowNone: true,
+                      );
+                      if (selected == null) return;
+                      setDialogState(
+                        () => selectedCategory = selected == noCategoryId
+                            ? null
+                            : selected,
+                      );
+                    },
                   ),
-                );
-              },
-              child: const Text('OK'),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.handshake_outlined,
+                      color: debtMode == DebtMode.none
+                          ? null
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text('Debt'),
+                    subtitle: Text(
+                      switch (debtMode) {
+                        DebtMode.none => 'Not linked',
+                        DebtMode.create =>
+                          debtPayeeId == null
+                              ? 'Write part to debt'
+                              : 'Write part to '
+                                    '${payees.where((payee) => payee.id == debtPayeeId).firstOrNull?.name ?? 'debt'}',
+                        DebtMode.resolve =>
+                          resolvedDebt == null
+                              ? 'Resolve a debt'
+                              : 'Resolve ${resolvedDebt!.label}',
+                      },
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: chooseMode,
+                  ),
+                  if (debtMode == DebtMode.create)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person_outline),
+                      title: const Text('Debt payee'),
+                      subtitle: Text(
+                        debtPayeeId == null
+                            ? 'Same as transaction payee'
+                            : payees
+                                      .where(
+                                        (payee) => payee.id == debtPayeeId,
+                                      )
+                                      .firstOrNull
+                                      ?.name ??
+                                  'Same as transaction payee',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: choosePayee,
+                    ),
+                  if (debtMode == DebtMode.resolve)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.receipt_long_outlined),
+                      title: const Text('Debt to resolve'),
+                      subtitle: Text(
+                        resolvedDebt == null
+                            ? 'Choose a debt'
+                            : '${resolvedDebt!.label} • '
+                                  '${formatMoney(resolvedDebt!.currentBalance, resolvedDebt!.currency)}',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        final debt = await _pickDebt();
+                        if (debt == null) return;
+                        setDialogState(() {
+                          resolveDebtId = debt.id;
+                          resolvedDebt = debt;
+                        });
+                        await prepareConversion();
+                      },
+                    ),
+                  if (debtMode != DebtMode.none && needsConversion) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Debt amount is kept in $home.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: rateController,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,]'),
+                              ),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: 'Exchange rate',
+                              helperText: '1 $_accountCurrency = ? $home',
+                            ),
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Calculate amount',
+                          icon: const Icon(Icons.south),
+                          onPressed: calculateAmount,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: homeAmountController,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,]'),
+                              ),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: 'Amount in $home',
+                            ),
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Calculate rate',
+                          icon: const Icon(Icons.north),
+                          onPressed: calculateRate,
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: commentController,
+                    decoration: const InputDecoration(labelText: 'Note'),
+                  ),
+                  if (error.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      error,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final parsed = parseAmountToMinor(
+                    amountController.text,
+                    _currency,
+                  );
+                  if (parsed == null || parsed == 0) {
+                    setDialogState(() => error = 'Enter an amount.');
+                    return;
+                  }
+                  if (debtMode == DebtMode.resolve && resolveDebtId == null) {
+                    setDialogState(() => error = 'Choose a debt.');
+                    return;
+                  }
+                  if (debtMode != DebtMode.none && needsConversion) {
+                    final homeAmount = parseAmountToMinor(
+                      homeAmountController.text,
+                      home,
+                    );
+                    final rate = double.tryParse(
+                      rateController.text.trim().replaceAll(',', '.'),
+                    );
+                    if (homeAmount == null ||
+                        homeAmount == 0 ||
+                        rate == null ||
+                        rate <= 0) {
+                      setDialogState(
+                        () => error =
+                            'Enter an exchange rate or the amount in $home.',
+                      );
+                      return;
+                    }
+                    convertedAmount = expense
+                        ? -homeAmount.abs()
+                        : homeAmount.abs();
+                  } else if (debtMode == DebtMode.none) {
+                    convertedAmount = null;
+                  }
+                  Navigator.of(context).pop(
+                    SplitDraft(
+                      id: initial?.id,
+                      categoryId: selectedCategory,
+                      amount: expense ? -parsed.abs() : parsed.abs(),
+                      comment: commentController.text.trim(),
+                      debtMode: debtMode,
+                      debtPayeeId: debtPayeeId,
+                      resolveDebtId: debtMode == DebtMode.resolve
+                          ? resolveDebtId
+                          : null,
+                      debtAmount: debtMode == DebtMode.none
+                          ? null
+                          : convertedAmount,
+                    ),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
       ),
     );
-    disposeAfterDialog([amountController, commentController]);
+    disposeAfterDialog([
+      amountController,
+      commentController,
+      rateController,
+      homeAmountController,
+    ]);
     return result;
   }
 
@@ -907,6 +1458,187 @@ class _TransactionEditorScreenState
       return;
     }
     setState(() => _categoryId = categoryId);
+  }
+
+  String get _homeCurrency => ref.read(settingsProvider).homeCurrency;
+
+  bool get _debtNeedsConversion => _accountCurrency != _homeCurrency;
+
+  String get _debtSummary {
+    switch (_debtMode) {
+      case DebtMode.none:
+        return 'Not linked';
+      case DebtMode.create:
+        final payees = ref.read(payeesProvider).value ?? const <Payee>[];
+        final name = _debtPayeeId == null
+            ? null
+            : payees
+                  .where((payee) => payee.id == _debtPayeeId)
+                  .firstOrNull
+                  ?.name;
+        return name == null
+            ? 'Write amount to debt'
+            : 'Write amount to $name\'s debt';
+      case DebtMode.resolve:
+        final debt = _resolvedDebt;
+        if (debt == null) return 'Resolve a debt';
+        return 'Resolve ${debt.label}';
+    }
+  }
+
+  Future<void> _pickDebtMode() async {
+    final mode = await showActionSheet<DebtMode>(
+      context,
+      title: 'Debt',
+      actions: [
+        const SheetAction(
+          value: DebtMode.none,
+          label: 'Not linked',
+          icon: Icons.link_off,
+        ),
+        const SheetAction(
+          value: DebtMode.create,
+          label: 'Write amount to debt',
+          icon: Icons.add_card,
+        ),
+        const SheetAction(
+          value: DebtMode.resolve,
+          label: 'Resolve a debt',
+          icon: Icons.check_circle_outline,
+        ),
+      ],
+    );
+    if (mode == null) return;
+    if (mode == DebtMode.resolve) {
+      final debt = await _pickDebt();
+      if (debt == null) return;
+      setState(() {
+        _debtMode = DebtMode.resolve;
+        _resolveDebtId = debt.id;
+        _resolvedDebt = debt;
+      });
+    } else {
+      setState(() {
+        _debtMode = mode;
+        if (mode == DebtMode.create) {
+          _debtPayeeId ??= _payeeId;
+        } else {
+          _resolveDebtId = null;
+          _resolvedDebt = null;
+        }
+      });
+    }
+    await _prepareDebtConversion();
+  }
+
+  Future<void> _pickDebtPayee() async {
+    final payees = ref.read(payeesProvider).value ?? const <Payee>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Debt payee',
+      hint: 'Search payees',
+      selected: _debtPayeeId ?? -1,
+      allowNone: true,
+      noneValue: -1,
+      noneLabel: 'Same as transaction payee',
+      entries: [
+        for (final payee in payees)
+          PickerEntry(
+            value: payee.id,
+            label: payee.name,
+            subtitle: payee.iban,
+            icon: Icons.person_outline,
+          ),
+      ],
+    );
+    if (value == null) return;
+    setState(() => _debtPayeeId = value == -1 ? null : value);
+  }
+
+  Future<Debt?> _pickDebt() async {
+    final debts = (await ref.read(repositoryProvider).debts())
+        .where((debt) => !debt.sealed && debt.currentBalance != 0)
+        .toList();
+    if (!mounted) return null;
+    if (debts.isEmpty) {
+      _snack('There are no open debts to resolve.');
+      return null;
+    }
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Resolve debt',
+      hint: 'Search debts',
+      selected: _resolveDebtId,
+      entries: [
+        for (final debt in debts)
+          PickerEntry(
+            value: debt.id,
+            label: debt.label,
+            subtitle:
+                '${debt.payeeName ?? 'No payee'} • '
+                '${formatMoney(debt.currentBalance, debt.currency)}',
+            icon: Icons.handshake_outlined,
+          ),
+      ],
+    );
+    if (value == null) return null;
+    return debts.where((debt) => debt.id == value).firstOrNull;
+  }
+
+  Future<void> _prepareDebtConversion() async {
+    if (!_debtNeedsConversion) {
+      _debtAmountController.clear();
+      _debtAmount = null;
+      _debtCurrency = null;
+      return;
+    }
+    _debtCurrency = _homeCurrency;
+    await _prefillDebtRate();
+  }
+
+  Future<void> _prefillDebtRate() async {
+    if (!_debtNeedsConversion) return;
+    if (_debtRateController.text.trim().isNotEmpty) {
+      _calculateDebtAmountFromRate();
+      return;
+    }
+    final rates = await ref
+        .read(repositoryProvider)
+        .exchangeRatesTo(_homeCurrency);
+    final rate = rates[_accountCurrency];
+    if (!mounted || rate == null || rate <= 0) return;
+    _debtRateController.text = formatRate(rate);
+    _calculateDebtAmountFromRate();
+  }
+
+  void _calculateDebtAmountFromRate() {
+    final rate = double.tryParse(
+      _debtRateController.text.trim().replaceAll(',', '.'),
+    );
+    final parsed = parseAmountToMinor(_amountController.text, _currency) ?? 0;
+    if (rate == null || rate <= 0 || parsed == 0 || !_debtNeedsConversion) {
+      _debtAmount = null;
+      _debtAmountController.clear();
+      return;
+    }
+    final converted = (parsed * rate).round();
+    _debtAmount = _type == DraftType.income ? converted : -converted;
+    _debtCurrency = _homeCurrency;
+    _debtAmountController.text = formatMoneyPlain(converted, _homeCurrency);
+    if (mounted) setState(() {});
+  }
+
+  void _calculateRateFromDebtAmount() {
+    final homeAmount =
+        parseAmountToMinor(_debtAmountController.text, _homeCurrency) ?? 0;
+    final parsed = parseAmountToMinor(_amountController.text, _currency) ?? 0;
+    if (homeAmount == 0 || parsed == 0) return;
+    final rate = homeAmount.abs() / parsed.abs();
+    _debtRateController.text = formatRate(rate);
+    final converted = homeAmount.abs();
+    _debtAmount = _type == DraftType.income ? converted : -converted;
+    _debtCurrency = _homeCurrency;
+    setState(() {});
   }
 
   Future<void> _addPayee() async {
@@ -1107,6 +1839,46 @@ class _TransactionEditorScreenState
       _snack('Enter an amount.');
       return;
     }
+    if (!_splitMode && _type != DraftType.transfer) {
+      if (_debtMode == DebtMode.create &&
+          _debtPayeeId == null &&
+          _payeeId == null) {
+        _snack('Choose a payee for the debt.');
+        return;
+      }
+      if (_debtMode == DebtMode.resolve && _resolveDebtId == null) {
+        _snack('Choose the debt to resolve.');
+        return;
+      }
+      if (_debtMode != DebtMode.none) {
+        if (_debtNeedsConversion) {
+          final homeAmount = parseAmountToMinor(
+            _debtAmountController.text,
+            _homeCurrency,
+          );
+          final rate = double.tryParse(
+            _debtRateController.text.trim().replaceAll(',', '.'),
+          );
+          if (homeAmount == null ||
+              homeAmount == 0 ||
+              rate == null ||
+              rate <= 0) {
+            _snack(
+              'Enter an exchange rate or the amount in $_homeCurrency.',
+            );
+            return;
+          }
+          final converted = homeAmount.abs();
+          _debtAmount = _type == DraftType.income
+              ? converted
+              : -converted;
+          _debtCurrency = _homeCurrency;
+        } else {
+          _debtAmount = null;
+          _debtCurrency = null;
+        }
+      }
+    }
     int? targetAmount;
     if (_type == DraftType.transfer) {
       final accounts =
@@ -1149,6 +1921,11 @@ class _TransactionEditorScreenState
         crStatus: _crStatus,
         parts: _splitMode ? _parts : [],
         tagIds: _tagIds.toList(),
+        debtMode: _splitMode ? DebtMode.none : _debtMode,
+        debtPayeeId: _debtPayeeId,
+        resolveDebtId: _resolveDebtId,
+        debtAmount: _debtAmount,
+        debtCurrency: _debtCurrency,
       );
       final repo = ref.read(repositoryProvider);
       final id = await repo.saveTransaction(draft);

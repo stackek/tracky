@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/dates.dart';
 import '../models/models.dart';
 import 'database.dart';
 
@@ -587,6 +588,115 @@ class Repository {
         });
       }
     });
+  }
+
+  // ------------------------------------------------------------------ debts
+
+  Future<List<Debt>> debts({int? payeeId}) async {
+    final args = <Object?>[];
+    var condition = '';
+    if (payeeId != null) {
+      condition = 'WHERE d.payee_id = ?';
+      args.add(payeeId);
+    }
+    final rows = await db.rawQuery('''
+      SELECT d._id, d.payee_id, d.label, d.description, d.date, d.amount,
+             d.equivalent_amount, d.currency, d.sealed,
+             p.name AS payee_name,
+             d.amount - COALESCE((
+               SELECT SUM(
+                 CASE WHEN t.original_currency = d.currency
+                       AND t.original_amount IS NOT NULL
+                      THEN t.original_amount ELSE t.amount END)
+               FROM transactions t
+               WHERE t.debt_id = d._id
+                 AND t.status != $statusVoid
+                 AND t.status != $statusArchived
+                 AND t.cr_status != 'VOID'
+             ), 0) AS balance
+      FROM debts d
+      LEFT JOIN payee p ON p._id = d.payee_id
+      $condition
+      ORDER BY d.date DESC, d._id DESC
+    ''', args);
+    return rows.map(Debt.fromMap).toList();
+  }
+
+  Future<Debt?> debt(int id) async {
+    final all = await debts();
+    for (final debt in all) {
+      if (debt.id == id) return debt;
+    }
+    return null;
+  }
+
+  Future<int> insertDebt({
+    required int? payeeId,
+    required String label,
+    required String description,
+    required int amount,
+    required DateTime date,
+    required String currency,
+    int? equivalentAmount,
+  }) {
+    return db.insert('debts', {
+      'payee_id': payeeId,
+      'label': label,
+      'description': description,
+      'date': toUnixTimestamp(date),
+      'amount': amount,
+      'equivalent_amount': equivalentAmount ?? amount,
+      'currency': currency,
+      'sealed': 0,
+    });
+  }
+
+  Future<void> updateDebt(
+    int id, {
+    required int? payeeId,
+    required String label,
+    required String description,
+    required int amount,
+    required DateTime date,
+    required String currency,
+    int? equivalentAmount,
+  }) async {
+    await db.update(
+      'debts',
+      {
+        'payee_id': payeeId,
+        'label': label,
+        'description': description,
+        'date': toUnixTimestamp(date),
+        'amount': amount,
+        'equivalent_amount': equivalentAmount ?? amount,
+        'currency': currency,
+      },
+      where: '_id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> deleteDebt(int id) async {
+    await db.delete('debts', where: '_id = ?', whereArgs: [id]);
+  }
+
+  Future<int?> createdDebtIdForTransaction(int transactionId) async {
+    final rows = await db.query(
+      'app_debt_transactions',
+      columns: ['debt_id'],
+      where: "transaction_id = ? AND role = 'creation'",
+      whereArgs: [transactionId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : asInt(rows.first['debt_id']);
+  }
+
+  Future<Map<int, int>> debtBalances() async {
+    final list = await debts();
+    return {
+      for (final debt in list) debt.id: debt.currentBalance,
+    };
   }
 
   // ---------------------------------------------------------------- currency

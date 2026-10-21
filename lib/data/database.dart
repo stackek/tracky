@@ -101,10 +101,22 @@ class AppDatabase {
       await _deleteDatabaseFiles();
       rethrow;
     }
+    await _ensureAppSchema(_db!);
     if (!exists) {
       await _seedDefaults(_db!);
       await _db!.execute('PRAGMA user_version = $myExpensesSchemaVersion');
     }
+  }
+
+  Future<void> _ensureAppSchema(Database database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS app_debt_transactions (
+        transaction_id integer NOT NULL references transactions(_id) ON DELETE CASCADE,
+        debt_id integer NOT NULL references debts(_id) ON DELETE CASCADE,
+        role text NOT NULL check (role in ('creation','resolution')),
+        primary key (transaction_id, debt_id)
+      )
+    ''');
   }
 
   Future<void> _deleteDatabaseFiles() async {

@@ -10,12 +10,25 @@ import 'repository.dart';
 enum DraftType { expense, income, transfer, split }
 
 class SplitDraft {
-  SplitDraft({this.id, this.categoryId, this.amount = 0, this.comment = ''});
+  SplitDraft({
+    this.id,
+    this.categoryId,
+    this.amount = 0,
+    this.comment = '',
+    this.debtMode = DebtMode.none,
+    this.debtPayeeId,
+    this.resolveDebtId,
+    this.debtAmount,
+  });
 
   int? id;
   int? categoryId;
   int amount;
   String comment;
+  DebtMode debtMode;
+  int? debtPayeeId;
+  int? resolveDebtId;
+  int? debtAmount;
 }
 
 class TransactionDraft {
@@ -36,6 +49,11 @@ class TransactionDraft {
     this.crStatus = 'UNRECONCILED',
     List<SplitDraft>? parts,
     List<int>? tagIds,
+    this.debtMode = DebtMode.none,
+    this.debtPayeeId,
+    this.resolveDebtId,
+    this.debtAmount,
+    this.debtCurrency,
   }) : date = date ?? DateTime.now(),
        valueDate = valueDate ?? date ?? DateTime.now(),
        parts = parts ?? [],
@@ -57,6 +75,11 @@ class TransactionDraft {
   String crStatus;
   List<SplitDraft> parts;
   List<int> tagIds;
+  DebtMode debtMode;
+  int? debtPayeeId;
+  int? resolveDebtId;
+  int? debtAmount;
+  String? debtCurrency;
 }
 
 extension TransactionRepository on Repository {
@@ -240,6 +263,9 @@ extension TransactionRepository on Repository {
     String number = '',
     String crStatus = 'UNRECONCILED',
     String? uuid,
+    int? debtId,
+    int? originalAmount,
+    String? originalCurrency,
   }) {
     return txn.insert('transactions', {
       'comment': comment,
@@ -257,43 +283,217 @@ extension TransactionRepository on Repository {
       'cr_status': crStatus,
       'number': number,
       'uuid': uuid ?? newUuid(),
+      'debt_id': debtId,
+      'original_amount': originalAmount,
+      'original_currency': originalCurrency,
     });
   }
 
   Future<int> saveTransaction(TransactionDraft draft) async {
     final id = await db.transaction((txn) async {
-      if (draft.id == null) {
-        return _insertDraft(txn, draft);
+      Transaction? existing;
+      if (draft.id != null) {
+        existing = await _transactionWithTxn(txn, draft.id!);
       }
-      final existing = await _transactionWithTxn(txn, draft.id!);
+      int? previousCreationDebtId;
+      if (existing != null) {
+        previousCreationDebtId = await _createdDebtId(txn, existing.id);
+        if (existing.isSplit) {
+          final oldChildren = await _childIds(txn, existing.id);
+          for (final childId in oldChildren) {
+            await _removeCreatedDebt(txn, childId);
+          }
+        }
+        if (draft.type == DraftType.transfer || draft.parts.isNotEmpty) {
+          await _removeCreatedDebt(txn, existing.id);
+          previousCreationDebtId = null;
+        }
+      }
+
+      int resultId;
       if (existing == null) {
-        return _insertDraft(txn, draft);
-      }
-      if (existing.isTransfer) {
+        resultId = await _insertDraft(txn, draft);
+      } else if (existing.isTransfer) {
         if (draft.type != DraftType.transfer) {
           await _deleteWithTxn(txn, existing.id);
-          return _insertDraft(txn, draft);
+          resultId = await _insertDraft(txn, draft);
+        } else {
+          resultId = await _updateTransfer(txn, existing, draft);
         }
-        return _updateTransfer(txn, existing, draft);
-      }
-      if (draft.type == DraftType.transfer) {
+      } else if (draft.type == DraftType.transfer) {
         await _deleteWithTxn(txn, existing.id);
-        return _insertDraft(txn, draft);
+        resultId = await _insertDraft(txn, draft);
+      } else if (draft.parts.isNotEmpty) {
+        resultId = await _updateSplit(txn, existing, draft);
+      } else {
+        if (existing.isSplit) {
+          await txn.delete(
+            'transactions',
+            where: 'parent_id = ?',
+            whereArgs: [existing.id],
+          );
+        }
+        resultId = await _updateSimple(txn, existing, draft);
       }
-      if (draft.parts.isNotEmpty) {
-        return _updateSplit(txn, existing, draft);
+
+      if (draft.type != DraftType.transfer) {
+        if (draft.parts.isNotEmpty) {
+          final childIds = await _childIds(txn, resultId);
+          for (var i = 0; i < draft.parts.length && i < childIds.length; i++) {
+            final part = draft.parts[i];
+            await _applyCreatedDebt(
+              txn,
+              transactionId: childIds[i],
+              previousDebtId: null,
+              mode: part.debtMode,
+              payeeId: part.debtPayeeId ?? draft.payeeId,
+              convertedAmount: part.debtAmount,
+              transactionAmount: part.amount,
+              date: draft.date,
+              comment: part.comment.isNotEmpty ? part.comment : draft.comment,
+              currency: draft.debtCurrency,
+              accountId: draft.accountId!,
+            );
+          }
+        } else {
+          final amount = draft.type == DraftType.income
+              ? draft.amount.abs()
+              : -draft.amount.abs();
+          await _applyCreatedDebt(
+            txn,
+            transactionId: resultId,
+            previousDebtId: previousCreationDebtId,
+            mode: draft.debtMode,
+            payeeId: draft.debtPayeeId ?? draft.payeeId,
+            convertedAmount: draft.debtAmount,
+            transactionAmount: amount,
+            date: draft.date,
+            comment: draft.comment,
+            currency: draft.debtCurrency,
+            accountId: draft.accountId!,
+          );
+        }
       }
-      if (existing.isSplit) {
-        await txn.delete(
-          'transactions',
-          where: 'parent_id = ?',
-          whereArgs: [existing.id],
-        );
-      }
-      return _updateSimple(txn, existing, draft);
+      return resultId;
     });
     await setTags(id, draft.tagIds);
     return id;
+  }
+
+  Future<List<int>> _childIds(DatabaseExecutor txn, int parentId) async {
+    final rows = await txn.query(
+      'transactions',
+      columns: ['_id'],
+      where: 'parent_id = ?',
+      whereArgs: [parentId],
+      orderBy: '_id',
+    );
+    return rows.map((row) => asIntOr(row['_id'], 0)).toList();
+  }
+
+  Future<int?> _createdDebtId(
+    DatabaseExecutor txn,
+    int transactionId,
+  ) async {
+    final rows = await txn.query(
+      'app_debt_transactions',
+      columns: ['debt_id'],
+      where: "transaction_id = ? AND role = 'creation'",
+      whereArgs: [transactionId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : asInt(rows.first['debt_id']);
+  }
+
+  Future<void> _removeCreatedDebt(
+    DatabaseExecutor txn,
+    int transactionId,
+  ) async {
+    final debtId = await _createdDebtId(txn, transactionId);
+    if (debtId == null) return;
+    await txn.delete(
+      'app_debt_transactions',
+      where: "transaction_id = ? AND role = 'creation'",
+      whereArgs: [transactionId],
+    );
+    await txn.delete('debts', where: '_id = ?', whereArgs: [debtId]);
+  }
+
+  Future<String> _accountCurrency(
+    DatabaseExecutor txn,
+    int accountId,
+  ) async {
+    final rows = await txn.query(
+      'accounts',
+      columns: ['currency'],
+      where: '_id = ?',
+      whereArgs: [accountId],
+      limit: 1,
+    );
+    return rows.isEmpty ? 'EUR' : asStringOr(rows.first['currency'], 'EUR');
+  }
+
+  Future<void> _applyCreatedDebt(
+    DatabaseExecutor txn, {
+    required int transactionId,
+    required int? previousDebtId,
+    required DebtMode mode,
+    required int? payeeId,
+    required int? convertedAmount,
+    required int transactionAmount,
+    required DateTime date,
+    required String comment,
+    required String? currency,
+    required int accountId,
+  }) async {
+    if (mode != DebtMode.create) {
+      if (previousDebtId != null) {
+        await _removeCreatedDebt(txn, transactionId);
+      }
+      return;
+    }
+    final debtCurrency =
+        currency ?? await _accountCurrency(txn, accountId);
+    final amount = -(convertedAmount ?? transactionAmount);
+    final label = comment.trim().isEmpty ? 'Debt' : comment.trim();
+    final values = {
+      'payee_id': payeeId,
+      'label': label,
+      'description': comment.trim(),
+      'date': toUnixTimestamp(date),
+      'amount': amount,
+      'equivalent_amount': amount,
+      'currency': debtCurrency,
+    };
+    if (previousDebtId != null) {
+      await txn.update(
+        'debts',
+        values,
+        where: '_id = ?',
+        whereArgs: [previousDebtId],
+      );
+      final link = await txn.query(
+        'app_debt_transactions',
+        columns: ['debt_id'],
+        where: "transaction_id = ? AND role = 'creation'",
+        whereArgs: [transactionId],
+        limit: 1,
+      );
+      if (link.isEmpty) {
+        await txn.insert('app_debt_transactions', {
+          'transaction_id': transactionId,
+          'debt_id': previousDebtId,
+          'role': 'creation',
+        });
+      }
+      return;
+    }
+    final debtId = await txn.insert('debts', values);
+    await txn.insert('app_debt_transactions', {
+      'transaction_id': transactionId,
+      'debt_id': debtId,
+      'role': 'creation',
+    });
   }
 
   Future<int> _insertDraft(DatabaseExecutor txn, TransactionDraft draft) async {
@@ -318,6 +518,9 @@ extension TransactionRepository on Repository {
       comment: draft.comment,
       number: draft.number,
       crStatus: draft.crStatus,
+      debtId: draft.resolveDebtId,
+      originalAmount: draft.resolveDebtId == null ? null : draft.debtAmount,
+      originalCurrency: draft.resolveDebtId == null ? null : draft.debtCurrency,
     );
   }
 
@@ -350,6 +553,9 @@ extension TransactionRepository on Repository {
         comment: part.comment,
         number: draft.number,
         crStatus: draft.crStatus,
+        debtId: part.resolveDebtId,
+        originalAmount: part.resolveDebtId == null ? null : part.debtAmount,
+        originalCurrency: part.resolveDebtId == null ? null : draft.debtCurrency,
       );
     }
     return parentId;
@@ -419,6 +625,11 @@ extension TransactionRepository on Repository {
         'date': toUnixTimestamp(draft.date),
         'value_date': toUnixTimestamp(draft.valueDate),
         'cr_status': draft.crStatus,
+        'debt_id': draft.resolveDebtId,
+        'original_amount': draft.resolveDebtId == null ? null : draft.debtAmount,
+        'original_currency': draft.resolveDebtId == null
+            ? null
+            : draft.debtCurrency,
       },
       where: '_id = ?',
       whereArgs: [existing.id],
@@ -445,6 +656,9 @@ extension TransactionRepository on Repository {
         'date': toUnixTimestamp(draft.date),
         'value_date': toUnixTimestamp(draft.valueDate),
         'cr_status': draft.crStatus,
+        'debt_id': null,
+        'original_amount': null,
+        'original_currency': null,
       },
       where: '_id = ?',
       whereArgs: [existing.id],
@@ -468,6 +682,9 @@ extension TransactionRepository on Repository {
         comment: part.comment,
         number: draft.number,
         crStatus: draft.crStatus,
+        debtId: part.resolveDebtId,
+        originalAmount: part.resolveDebtId == null ? null : part.debtAmount,
+        originalCurrency: part.resolveDebtId == null ? null : draft.debtCurrency,
       );
     }
     return existing.id;
@@ -568,6 +785,9 @@ extension TransactionRepository on Repository {
       whereArgs: [id],
     );
     ids.addAll(childRows.map((row) => asIntOr(row['_id'], 0)));
+    for (final transactionId in ids) {
+      await _removeCreatedDebt(txn, transactionId);
+    }
     final placeholders = List.filled(ids.length, '?').join(',');
     final attachmentRows = await txn.rawQuery('''
       SELECT a._id, a.uri FROM attachments a

@@ -11,6 +11,7 @@ import 'screens/budgets/budget_detail_screen.dart';
 import 'screens/budgets/budgets_screen.dart';
 import 'screens/categories/categories_screen.dart';
 import 'screens/categories/category_editor_screen.dart';
+import 'screens/debts/debts_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/more/more_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
@@ -112,6 +113,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const PaymentMethodsScreen(),
       ),
       GoRoute(path: '/tags', builder: (context, state) => const TagsScreen()),
+      GoRoute(
+        path: '/debts',
+        builder: (context, state) => const DebtsScreen(),
+      ),
       GoRoute(
         path: '/budgets',
         builder: (context, state) => const BudgetsScreen(),

@@ -43,6 +43,12 @@ class MoreScreen extends ConsumerWidget {
                 title: 'Tags',
                 onTap: () => context.push('/tags'),
               ),
+              _Tile(
+                icon: Icons.handshake_outlined,
+                title: 'Debts',
+                subtitle: 'What payees owe you or you owe them',
+                onTap: () => context.push('/debts'),
+              ),
             ],
           ),
           _Group(

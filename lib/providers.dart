@@ -298,6 +298,10 @@ final statsProvider = FutureProvider<StatsData>((ref) {
       );
 });
 
+final debtsProvider = FutureProvider<List<Debt>>(
+  (ref) => ref.watch(repositoryProvider).debts(),
+);
+
 final budgetsProvider = FutureProvider<List<Budget>>(
   (ref) => ref.watch(repositoryProvider).budgets(),
 );
@@ -343,6 +347,7 @@ void invalidateTransactionData(WidgetRef ref) {
   ref.invalidate(topCategoryProvider);
   ref.invalidate(statsProvider);
   ref.invalidate(budgetsProvider);
+  ref.invalidate(debtsProvider);
 }
 
 void invalidateLookupData(WidgetRef ref) {

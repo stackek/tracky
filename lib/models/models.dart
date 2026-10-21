@@ -583,6 +583,53 @@ class TransactionFilter {
       period != TransactionPeriod.lastMonth;
 }
 
+enum DebtMode { none, create, resolve }
+
+class Debt {
+  const Debt({
+    required this.id,
+    required this.payeeId,
+    required this.label,
+    required this.description,
+    required this.date,
+    required this.amount,
+    required this.currency,
+    required this.equivalentAmount,
+    required this.sealed,
+    this.payeeName,
+    this.balance,
+  });
+
+  final int id;
+  final int? payeeId;
+  final String label;
+  final String description;
+  final DateTime date;
+  final int amount;
+  final String currency;
+  final int? equivalentAmount;
+  final bool sealed;
+  final String? payeeName;
+  final int? balance;
+
+  int get currentBalance => balance ?? amount;
+  bool get isClosed => currentBalance == 0;
+
+  factory Debt.fromMap(Map<String, Object?> map) => Debt(
+        id: asIntOr(map['_id'], 0),
+        payeeId: asInt(map['payee_id']),
+        label: asStringOr(map['label']),
+        description: asStringOr(map['description']),
+        date: fromUnixTimestamp(asIntOr(map['date'], 0)),
+        amount: asIntOr(map['amount'], 0),
+        currency: asStringOr(map['currency'], 'EUR'),
+        equivalentAmount: asInt(map['equivalent_amount']),
+        sealed: asBool(map['sealed']),
+        payeeName: asString(map['payee_name']),
+        balance: asInt(map['balance']),
+      );
+}
+
 class Budget {
   const Budget({
     required this.id,
