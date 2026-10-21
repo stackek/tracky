@@ -248,6 +248,10 @@ final activeAccountsProvider = FutureProvider<List<Account>>(
   (ref) => ref.watch(repositoryProvider).activeAccounts(),
 );
 
+final accountLastTransactionProvider = FutureProvider<Map<int, DateTime>>(
+  (ref) => ref.watch(repositoryProvider).lastTransactionDates(),
+);
+
 final accountTypesProvider = FutureProvider<List<AccountType>>(
   (ref) => ref.watch(repositoryProvider).accountTypes(),
 );

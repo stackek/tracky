@@ -216,6 +216,24 @@ extension TransactionRepository on Repository {
     return null;
   }
 
+  Future<Map<int, DateTime>> lastTransactionDates() async {
+    final rows = await db.rawQuery('''
+      SELECT account_id, MAX(date) AS last_date
+      FROM transactions
+      WHERE status != $statusVoid
+        AND status != $statusArchived
+        AND cr_status != 'VOID'
+      GROUP BY account_id
+    ''');
+    return {
+      for (final row in rows)
+        if (asInt(row['account_id']) != null)
+          asInt(row['account_id'])!: fromUnixTimestamp(
+            asIntOr(row['last_date'], 0),
+          ),
+    };
+  }
+
   Future<Transaction?> lastTransactionForPayee(int payeeId) async {
     final list = await transactions(
       TransactionFilter(payeeId: payeeId, period: TransactionPeriod.all),
