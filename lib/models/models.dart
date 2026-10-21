@@ -467,6 +467,8 @@ class Transaction {
   }
 }
 
+enum StatsType { expense, income }
+
 enum TransactionPeriod { all, thisMonth, lastMonth, last3Months, thisYear, custom }
 
 extension TransactionPeriodLabel on TransactionPeriod {

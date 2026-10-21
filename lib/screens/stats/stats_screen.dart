@@ -18,6 +18,7 @@ class StatsScreen extends ConsumerWidget {
     final month = ref.watch(statsMonthProvider);
     final range = ref.watch(statsRangeProvider);
     final accountId = ref.watch(statsAccountProvider);
+    final statsType = ref.watch(statsTypeProvider);
     final accounts =
         ref.watch(activeAccountsProvider).value ?? const <Account>[];
     final stats = ref.watch(statsProvider);
@@ -122,16 +123,26 @@ class StatsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _SummaryCards(data: data, theme: theme),
+                _SummaryCards(
+                  data: data,
+                  theme: theme,
+                  type: statsType,
+                  onTypeChanged: (value) =>
+                      ref.read(statsTypeProvider.notifier).set(value),
+                ),
                 const SizedBox(height: 22),
                 if (data.byCategory.isEmpty)
-                  const EmptyState(
+                  EmptyState(
                     icon: Icons.pie_chart_outline,
-                    title: 'No expenses in this period',
-                    message: 'Add an expense to see the breakdown by category.',
+                    title: statsType == StatsType.income
+                        ? 'No income in this period'
+                        : 'No expenses in this period',
+                    message: statsType == StatsType.income
+                        ? 'Add income to see the breakdown by category.'
+                        : 'Add an expense to see the breakdown by category.',
                   )
                 else
-                  _CategoryBreakdown(data: data),
+                  _CategoryBreakdown(data: data, type: statsType),
                 const SizedBox(height: 12),
                 Center(
                   child: Text(
@@ -305,10 +316,17 @@ class _Header extends StatelessWidget {
 }
 
 class _SummaryCards extends StatelessWidget {
-  const _SummaryCards({required this.data, required this.theme});
+  const _SummaryCards({
+    required this.data,
+    required this.theme,
+    required this.type,
+    required this.onTypeChanged,
+  });
 
   final StatsData data;
   final ThemeData theme;
+  final StatsType type;
+  final ValueChanged<StatsType> onTypeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -326,6 +344,8 @@ class _SummaryCards extends StatelessWidget {
                 icon: Icons.south_west,
                 color: theme.colorScheme.primary,
                 background: theme.colorScheme.primaryContainer,
+                selected: type == StatsType.income,
+                onTap: () => onTypeChanged(StatsType.income),
               ),
             ),
             const SizedBox(width: 10),
@@ -337,6 +357,8 @@ class _SummaryCards extends StatelessWidget {
                 icon: Icons.north_east,
                 color: theme.colorScheme.error,
                 background: theme.colorScheme.errorContainer,
+                selected: type == StatsType.expense,
+                onTap: () => onTypeChanged(StatsType.expense),
               ),
             ),
           ],
@@ -385,6 +407,8 @@ class _BigCard extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.background,
+    required this.selected,
+    required this.onTap,
   });
 
   final String label;
@@ -393,51 +417,68 @@ class _BigCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final Color background;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: background,
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? color : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: theme.textTheme.labelMedium?.copyWith(color: color),
+              Row(
+                children: [
+                  Icon(icon, size: 16, color: color),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: theme.textTheme.labelMedium?.copyWith(color: color),
+                    ),
+                  ),
+                  if (selected) Icon(Icons.check_circle, size: 16, color: color),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formatMoney(amount, currency),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              formatMoney(amount, currency),
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _CategoryBreakdown extends StatefulWidget {
-  const _CategoryBreakdown({required this.data});
+  const _CategoryBreakdown({required this.data, required this.type});
 
   final StatsData data;
+  final StatsType type;
 
   @override
   State<_CategoryBreakdown> createState() => _CategoryBreakdownState();
@@ -464,7 +505,9 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
           children: [
             Expanded(
               child: Text(
-                'Spending by category',
+                widget.type == StatsType.income
+                    ? 'Income by category'
+                    : 'Spending by category',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),

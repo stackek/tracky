@@ -153,6 +153,16 @@ class StatsMonthNotifier extends Notifier<DateTime> {
 final statsMonthProvider =
     NotifierProvider<StatsMonthNotifier, DateTime>(StatsMonthNotifier.new);
 
+class StatsTypeNotifier extends Notifier<StatsType> {
+  @override
+  StatsType build() => StatsType.expense;
+
+  void set(StatsType value) => state = value;
+}
+
+final statsTypeProvider =
+    NotifierProvider<StatsTypeNotifier, StatsType>(StatsTypeNotifier.new);
+
 class StatsAccountNotifier extends Notifier<int?> {
   @override
   int? build() => null;
@@ -258,12 +268,14 @@ final statsProvider = FutureProvider<StatsData>((ref) {
   final month = ref.watch(statsMonthProvider);
   final accountId = ref.watch(statsAccountProvider);
   final range = ref.watch(statsRangeProvider);
+  final type = ref.watch(statsTypeProvider);
   final settings = ref.watch(settingsProvider);
   return ref.watch(repositoryProvider).stats(
         accountId: accountId,
         month: month,
         rangeFrom: range?.start,
         rangeTo: range?.end,
+        type: type,
         homeCurrency: settings.homeCurrency,
       );
 });

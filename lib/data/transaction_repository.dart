@@ -615,6 +615,7 @@ extension TransactionRepository on Repository {
     DateTime? month,
     DateTime? rangeFrom,
     DateTime? rangeTo,
+    StatsType type = StatsType.expense,
     required String homeCurrency,
   }) async {
     final accountIds = await _statsAccountIds(accountId);
@@ -664,12 +665,14 @@ extension TransactionRepository on Repository {
     ''', rangeArgs);
     final current = currentRows.isEmpty ? const {} : currentRows.first;
 
+    final income = type == StatsType.income;
+    final categoryAmount = income ? 't.amount' : '-t.amount';
     final categoryRows = await db.rawQuery('''
       SELECT COALESCE(c.parent_id, c._id, 0) AS group_id,
              COALESCE(pc.label, c.label, 'Uncategorized') AS label,
              COALESCE(pc.icon, c.icon) AS icon,
              COALESCE(pc.color, c.color) AS color,
-             SUM(CAST(ROUND(-t.amount * $rateExpression) AS INTEGER)) AS amount
+             SUM(CAST(ROUND($categoryAmount * $rateExpression) AS INTEGER)) AS amount
       FROM transactions t
       JOIN accounts a ON a._id = t.account_id
       LEFT JOIN categories c ON c._id = t.cat_id
@@ -678,11 +681,11 @@ extension TransactionRepository on Repository {
         AND t.date >= ? AND t.date < ?
         AND t.status != $statusVoid AND t.status != $statusArchived
         AND t.cr_status != 'VOID'
-        AND t.amount < 0
+        AND t.amount ${income ? '>' : '<'} 0
         AND (t.cat_id IS NULL OR t.cat_id NOT IN ($splitCategoryId, $transferCategoryId))
       GROUP BY group_id
-      HAVING SUM(-t.amount * $rateExpression) > 0
-      ORDER BY SUM(-t.amount * $rateExpression) DESC
+      HAVING SUM($categoryAmount * $rateExpression) > 0
+      ORDER BY SUM($categoryAmount * $rateExpression) DESC
     ''', rangeArgs);
     final byCategory = categoryRows
         .map((row) => CategoryTotal(
