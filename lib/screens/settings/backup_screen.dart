@@ -11,6 +11,7 @@ import '../../core/ui_utils.dart';
 import '../../data/auto_backup_service.dart';
 import '../../data/csv_service.dart';
 import '../../providers.dart';
+import '../../widgets/search_picker.dart';
 import 'backup_helpers.dart';
 
 class BackupScreen extends ConsumerStatefulWidget {
@@ -247,18 +248,29 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<AutoBackupUnit>(
-                initialValue: unit,
-                decoration: const InputDecoration(labelText: 'Unit'),
-                items: [
-                  for (final value in AutoBackupUnit.values)
-                    DropdownMenuItem(
-                      value: value,
-                      child: Text(value.label),
-                    ),
-                ],
-                onChanged: (value) {
-                  if (value != null) setDialogState(() => unit = value);
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule),
+                title: const Text('Unit'),
+                subtitle: Text(unit.label),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final selected = await showSearchPicker<AutoBackupUnit>(
+                    context: context,
+                    title: 'Backup period unit',
+                    selected: unit,
+                    entries: [
+                      for (final value in AutoBackupUnit.values)
+                        PickerEntry(
+                          value: value,
+                          label: value.label,
+                          icon: Icons.schedule,
+                        ),
+                    ],
+                  );
+                  if (selected != null) {
+                    setDialogState(() => unit = selected);
+                  }
                 },
               ),
             ],
