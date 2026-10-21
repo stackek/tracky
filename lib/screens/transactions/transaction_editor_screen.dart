@@ -170,26 +170,20 @@ class _TransactionEditorScreenState
             .where((account) => account.id != _accountId)
             .firstOrNull
             ?.id;
-      } else if (_accountId != null) {
-        final previous = await repo.lastTransactionForAccount(_accountId!);
-        final payeeId = previous?.payeeId;
-        if (payeeId != null) {
-          _payeeId = payeeId;
-          final lastForPayee = await repo.lastTransactionForPayee(payeeId);
-          final categoryId = lastForPayee?.catId;
-          if (categoryId != null) {
-            final category = await repo.category(categoryId);
-            final expected = _type == DraftType.income ? 2 : 1;
-            if (category != null &&
-                (category.type == expected || category.type == 0)) {
-              _categoryId = categoryId;
-            }
-          }
-        }
       }
       _amountController.text = '';
     }
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() => _loading = false);
+      if (widget.transactionId == null && _type != DraftType.transfer) {
+        final payees = await repo.payees();
+        if (payees.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _pickPayee();
+          });
+        }
+      }
+    }
   }
 
   void _updateSplitTotal() {
@@ -302,7 +296,59 @@ class _TransactionEditorScreenState
                 ],
               ),
             ),
-          const SizedBox(height: 16),
+          if (_type != DraftType.transfer) ...[
+            _SectionCard(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    Icons.person_outline,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  title: const Text('Payee'),
+                  subtitle: Text(
+                    _payeeId == null
+                        ? 'None'
+                        : payees
+                                  .where((payee) => payee.id == _payeeId)
+                                  .firstOrNull
+                                  ?.name ??
+                              'None',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Add payee',
+                        icon: const Icon(Icons.add),
+                        onPressed: _addPayee,
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                  onTap: _pickPayee,
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.payment,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  title: const Text('Payment method'),
+                  subtitle: Text(
+                    _methodId == null
+                        ? 'None'
+                        : methods
+                                  .where((method) => method.id == _methodId)
+                                  .firstOrNull
+                                  ?.displayName ??
+                              'None',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _pickMethod,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           _AmountCard(
             controller: _amountController,
             currency: _splitMode ? _currency : _currency,
@@ -441,59 +487,6 @@ class _TransactionEditorScreenState
                 ),
               ],
             ),
-          if (_type != DraftType.transfer) ...[
-            const SizedBox(height: 12),
-            _SectionCard(
-              children: [
-                ListTile(
-                  leading: Icon(
-                    Icons.person_outline,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  title: const Text('Payee'),
-                  subtitle: Text(
-                    _payeeId == null
-                        ? 'None'
-                        : payees
-                                  .where((payee) => payee.id == _payeeId)
-                                  .firstOrNull
-                                  ?.name ??
-                              'None',
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: 'Add payee',
-                        icon: const Icon(Icons.add),
-                        onPressed: _addPayee,
-                      ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                  onTap: _pickPayee,
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.payment,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  title: const Text('Payment method'),
-                  subtitle: Text(
-                    _methodId == null
-                        ? 'None'
-                        : methods
-                                  .where((method) => method.id == _methodId)
-                                  .firstOrNull
-                                  ?.displayName ??
-                              'None',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _pickMethod,
-                ),
-              ],
-            ),
-          ],
           const SizedBox(height: 12),
           _SectionCard(
             children: [
@@ -902,11 +895,18 @@ class _TransactionEditorScreenState
   Future<void> _selectPayee(int? payeeId) async {
     setState(() => _payeeId = payeeId);
     if (payeeId == null || _splitMode || _type == DraftType.transfer) return;
-    final previous = await ref
-        .read(repositoryProvider)
-        .lastTransactionForPayee(payeeId);
-    if (!mounted || previous?.catId == null) return;
-    setState(() => _categoryId = previous!.catId);
+    final repo = ref.read(repositoryProvider);
+    final previous = await repo.lastTransactionForPayee(payeeId);
+    final categoryId = previous?.catId;
+    if (!mounted || categoryId == null) return;
+    final category = await repo.category(categoryId);
+    final expected = _type == DraftType.income ? 2 : 1;
+    if (!mounted ||
+        category == null ||
+        (category.type != expected && category.type != 0)) {
+      return;
+    }
+    setState(() => _categoryId = categoryId);
   }
 
   Future<void> _addPayee() async {
