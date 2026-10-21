@@ -278,7 +278,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     String? password;
     if (encrypted) {
       password = await askBackupPassword(context, confirm: true);
-      if (password == null || password.isEmpty) return;
+      if (password == null || password.isEmpty || !mounted) return;
     }
     final service = ref.read(backupServiceProvider);
     final file = await runWithProgress<File>(
@@ -413,7 +413,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     final path = files.isEmpty ? null : files.first.path;
     if (path == null) return;
     final accounts = await ref.read(repositoryProvider).activeAccounts();
-    if (accounts.isEmpty) return;
+    if (accounts.isEmpty || !mounted) return;
     final csv = CsvService(ref.read(repositoryProvider));
     final imported = await runWithProgress<CsvImportResult>(
       context,
