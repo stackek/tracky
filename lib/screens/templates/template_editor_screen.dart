@@ -28,6 +28,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
   final _commentController = TextEditingController();
 
   bool _loading = true;
+  bool _dirty = false;
   bool _transfer = false;
   bool _income = false;
   int? _templateId;
@@ -73,6 +74,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     } else {
       _accountId = accounts.firstOrNull?.id;
     }
+    _dirty = false;
     if (mounted) setState(() => _loading = false);
   }
 
@@ -93,7 +95,12 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
             .firstOrNull
             ?.currency ??
         ref.read(settingsProvider).homeCurrency;
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_templateId == null ? 'New template' : 'Edit template'),
       ),
@@ -108,6 +115,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
               labelText: 'Template name',
               prefixIcon: Icon(Icons.label_outline),
             ),
+            onChanged: (_) => _dirty = true,
           ),
           const SizedBox(height: 14),
           SegmentedButton<int>(
@@ -130,6 +138,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
             ],
             selected: {_transfer ? 2 : (_income ? 1 : 0)},
             onSelectionChanged: (selection) => setState(() {
+              _dirty = true;
               final value = selection.first;
               _transfer = value == 2;
               _income = value == 1;
@@ -153,6 +162,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
               prefixIcon: const Icon(Icons.payments_outlined),
               suffixText: currency,
             ),
+            onChanged: (_) => _dirty = true,
           ),
           const SizedBox(height: 12),
           ListTile(
@@ -215,10 +225,10 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
                   allowNone: true,
                 );
                 if (selected == null) return;
-                setState(
-                  () =>
-                      _categoryId = selected == noCategoryId ? null : selected,
-                );
+                setState(() {
+                  _dirty = true;
+                  _categoryId = selected == noCategoryId ? null : selected;
+                });
               },
             ),
             const SizedBox(height: 12),
@@ -250,6 +260,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
               labelText: 'Note',
               prefixIcon: Icon(Icons.notes),
             ),
+            onChanged: (_) => _dirty = true,
           ),
         ],
       ),
@@ -275,7 +286,32 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           ),
         ),
       ),
+      ),
     );
+  }
+
+  Future<void> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your changes have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      _dirty = false;
+      context.pop();
+    }
   }
 
   Future<void> _pickAccount() async {
@@ -298,6 +334,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     );
     if (value == null) return;
     setState(() {
+      _dirty = true;
       _accountId = value;
       if (_targetAccountId == value) {
         _targetAccountId = accounts
@@ -327,7 +364,12 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
             ),
       ],
     );
-    if (value != null) setState(() => _targetAccountId = value);
+    if (value != null) {
+      setState(() {
+        _dirty = true;
+        _targetAccountId = value;
+      });
+    }
   }
 
   Future<void> _pickPayee() async {
@@ -350,7 +392,10 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
       ],
     );
     if (value != null) {
-      setState(() => _payeeId = value == -1 ? null : value);
+      setState(() {
+        _dirty = true;
+        _payeeId = value == -1 ? null : value;
+      });
     }
   }
 
@@ -397,6 +442,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
         );
       }
       ref.invalidate(templatesProvider);
+      _dirty = false;
       if (!addTransaction) {
         if (mounted) context.pop();
         return;

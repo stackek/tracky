@@ -28,6 +28,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
   final _iconSearchController = TextEditingController();
   String _iconSearch = '';
   bool _loading = true;
+  bool _dirty = false;
   int? _categoryId;
   int _type = 1;
   int? _parentId;
@@ -38,8 +39,11 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
   void initState() {
     super.initState();
     _type = widget.initialType;
+    _labelController.addListener(_markDirty);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
+
+  void _markDirty() => _dirty = true;
 
   @override
   void dispose() {
@@ -62,6 +66,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
         _icon = category.icon ?? 'category';
       }
     }
+    _dirty = false;
     if (mounted) setState(() => _loading = false);
   }
 
@@ -85,7 +90,12 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
               iconSearchLabel(entry.key).toLowerCase().contains(query),
         )
         .toList();
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_categoryId == null ? 'New category' : 'Edit category'),
       ),
@@ -117,8 +127,10 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                 ),
               ],
               selected: {_type},
-              onSelectionChanged: (value) =>
-                  setState(() => _type = value.first),
+              onSelectionChanged: (value) => setState(() {
+                _dirty = true;
+                _type = value.first;
+              }),
             ),
           const SizedBox(height: 12),
           ListTile(
@@ -160,6 +172,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
               );
               if (value == null) return;
               setState(() {
+                _dirty = true;
                 _parentId = value == -1 ? null : value;
                 final parent = possibleParents
                     .where((category) => category.id == _parentId)
@@ -178,7 +191,10 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
               for (final color in categoryColorChoices)
                 InkWell(
                   borderRadius: BorderRadius.circular(30),
-                  onTap: () => setState(() => _color = color),
+                  onTap: () => setState(() {
+                      _dirty = true;
+                      _color = color;
+                    }),
                   child: Container(
                     width: 38,
                     height: 38,
@@ -251,7 +267,10 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                       final selected = entry.key == _icon;
                       return InkWell(
                         borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() => _icon = entry.key),
+                        onTap: () => setState(() {
+                          _dirty = true;
+                          _icon = entry.key;
+                        }),
                         child: Container(
                           decoration: BoxDecoration(
                             color: selected
@@ -303,7 +322,32 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
           ),
         ),
       ),
+      ),
     );
+  }
+
+  Future<void> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your changes have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      _dirty = false;
+      context.pop();
+    }
   }
 
   Future<void> _save() async {
@@ -339,6 +383,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
       ref.invalidate(categoryTreeProvider);
       ref.invalidate(transactionsProvider);
       ref.invalidate(statsProvider);
+      _dirty = false;
       if (mounted) context.pop();
     } catch (error) {
       if (mounted) {
@@ -377,6 +422,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
       ref.invalidate(categoryTreeProvider);
       ref.invalidate(transactionsProvider);
       ref.invalidate(statsProvider);
+      _dirty = false;
       if (mounted) context.pop();
     } catch (error) {
       if (mounted) {

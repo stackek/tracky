@@ -26,6 +26,7 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
   final _openingBalanceController = TextEditingController();
 
   bool _loading = true;
+  bool _dirty = false;
   int? _accountId;
   int _type = 1;
   String _currency = 'EUR';
@@ -37,8 +38,13 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
   @override
   void initState() {
     super.initState();
+    _labelController.addListener(_markDirty);
+    _descriptionController.addListener(_markDirty);
+    _openingBalanceController.addListener(_markDirty);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
+
+  void _markDirty() => _dirty = true;
 
   @override
   void dispose() {
@@ -70,6 +76,7 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
         _grouping = account.grouping;
       }
     }
+    _dirty = false;
     if (mounted) setState(() => _loading = false);
   }
 
@@ -82,7 +89,12 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
         ref.watch(accountTypesProvider).value ?? const <AccountType>[];
     final currencies =
         ref.watch(currenciesProvider).value ?? const <CurrencyInfo>[];
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_accountId == null ? 'New account' : 'Edit account'),
         actions: [
@@ -139,7 +151,12 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
                     ),
                 ],
               );
-              if (value != null) setState(() => _type = value);
+              if (value != null) {
+                setState(() {
+                  _dirty = true;
+                  _type = value;
+                });
+              }
             },
           ),
           const SizedBox(height: 12),
@@ -151,7 +168,12 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
                 currencies,
                 selected: _currency,
               );
-              if (result != null) setState(() => _currency = result);
+              if (result != null) {
+                setState(() {
+                  _dirty = true;
+                  _currency = result;
+                });
+              }
             },
             child: InputDecorator(
               decoration: const InputDecoration(
@@ -203,7 +225,10 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
               for (final color in categoryColorChoices)
                 InkWell(
                   borderRadius: BorderRadius.circular(30),
-                  onTap: () => setState(() => _color = color),
+                  onTap: () => setState(() {
+                      _dirty = true;
+                      _color = color;
+                    }),
                   child: Container(
                     width: 40,
                     height: 40,
@@ -230,7 +255,10 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
             title: const Text('Exclude from totals'),
             subtitle: const Text('Hide this account in the grand total'),
             value: _excludeFromTotals,
-            onChanged: (value) => setState(() => _excludeFromTotals = value),
+            onChanged: (value) => setState(() {
+                      _dirty = true;
+                      _excludeFromTotals = value;
+                    }),
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
@@ -244,7 +272,10 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
               DropdownMenuItem(value: 1, child: Text('Favourite')),
               DropdownMenuItem(value: 2, child: Text('Archived')),
             ],
-            onChanged: (value) => setState(() => _flag = value ?? 0),
+            onChanged: (value) => setState(() {
+                      _dirty = true;
+                      _flag = value ?? 0;
+                    }),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -260,7 +291,10 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
               DropdownMenuItem(value: 'MONTH', child: Text('Month')),
               DropdownMenuItem(value: 'YEAR', child: Text('Year')),
             ],
-            onChanged: (value) => setState(() => _grouping = value ?? 'NONE'),
+            onChanged: (value) => setState(() {
+                      _dirty = true;
+                      _grouping = value ?? 'NONE';
+                    }),
           ),
         ],
       ),
@@ -273,7 +307,32 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
           ),
         ),
       ),
+      ),
     );
+  }
+
+  Future<void> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your changes have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      _dirty = false;
+      context.pop();
+    }
   }
 
   Future<void> _save() async {
@@ -314,6 +373,7 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
       );
     }
     invalidateTransactionData(ref);
+    _dirty = false;
     if (mounted) context.pop();
   }
 
@@ -342,6 +402,7 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
     try {
       await ref.read(repositoryProvider).deleteAccount(_accountId!);
       invalidateTransactionData(ref);
+      _dirty = false;
       if (mounted) context.pop();
     } catch (error) {
       if (mounted) {
