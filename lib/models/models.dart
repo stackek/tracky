@@ -645,6 +645,7 @@ class Debt {
   final int? balance;
 
   int get currentBalance => balance ?? amount;
+  bool get isArchived => sealed;
   bool get isClosed => currentBalance == 0;
 
   factory Debt.fromMap(Map<String, Object?> map) => Debt(
@@ -660,6 +661,20 @@ class Debt {
         payeeName: asString(map['payee_name']),
         balance: asInt(map['balance']),
       );
+}
+
+enum DebtTransactionFilter { all, increasing, resolving }
+
+enum DebtRemovalAction { deleteTransactions, reassign, detach }
+
+class DebtTransactionEntry {
+  const DebtTransactionEntry({
+    required this.transaction,
+    required this.resolving,
+  });
+
+  final Transaction transaction;
+  final bool resolving;
 }
 
 class Budget {

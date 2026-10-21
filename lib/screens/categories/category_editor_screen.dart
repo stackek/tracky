@@ -6,17 +6,20 @@ import 'package:go_router/go_router.dart';
 import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
-import '../../widgets/search_picker.dart';
+import '../../widgets/category_picker.dart';
+import '../../widgets/color_wheel_dialog.dart';
 
 class CategoryEditorScreen extends ConsumerStatefulWidget {
   const CategoryEditorScreen({
     super.key,
     this.categoryId,
     this.initialType = 1,
+    this.initialParentId,
   });
 
   final int? categoryId;
   final int initialType;
+  final int? initialParentId;
 
   @override
   ConsumerState<CategoryEditorScreen> createState() =>
@@ -34,6 +37,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
   int? _parentId;
   int _color = categoryColorChoices.first;
   String _icon = 'category';
+  Set<int> _blockedParentIds = {};
 
   @override
   void initState() {
@@ -64,6 +68,18 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
         _parentId = category.parentId == category.id ? null : category.parentId;
         _color = category.color ?? categoryColorChoices.first;
         _icon = category.icon ?? 'category';
+        _blockedParentIds = (await ref
+                .read(repositoryProvider)
+                .categoryDescendants(category.id))
+            .toSet();
+      }
+    } else if (widget.initialParentId != null) {
+      final parent = await ref
+          .read(repositoryProvider)
+          .category(widget.initialParentId!);
+      if (parent != null) {
+        _parentId = parent.id;
+        _type = parent.type == 0 ? widget.initialType : parent.type;
       }
     }
     _dirty = false;
@@ -78,9 +94,11 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
     final categories =
         ref.watch(categoriesProvider).value ?? const <Category>[];
     final possibleParents = categories
-        .where((category) => category.id != _categoryId)
+        .where((category) => !_blockedParentIds.contains(category.id))
         .where((category) => category.type == _type)
         .toList();
+    final palette = [...categoryColorChoices];
+    if (!palette.contains(_color)) palette.insert(0, _color);
     final query = _iconSearch.trim().toLowerCase();
     final iconChoices = allCategoryIcons
         .where(
@@ -151,29 +169,16 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
-              final value = await showSearchPicker<int>(
-                context: context,
-                title: 'Parent category',
-                hint: 'Search categories',
-                selected: _parentId ?? -1,
+              final value = await showCategoryPicker(
+                context,
+                possibleParents,
+                initialId: _parentId,
                 allowNone: true,
-                noneLabel: 'None (top level)',
-                noneValue: -1,
-                entries: [
-                  for (final category in possibleParents)
-                    PickerEntry(
-                      value: category.id,
-                      label: category.label,
-                      subtitle: category.displayPath,
-                      icon: iconForCategory(category.icon),
-                      color: colorFromDb(category.color),
-                    ),
-                ],
               );
               if (value == null) return;
               setState(() {
                 _dirty = true;
-                _parentId = value == -1 ? null : value;
+                _parentId = value == noCategoryId ? null : value;
                 final parent = possibleParents
                     .where((category) => category.id == _parentId)
                     .firstOrNull;
@@ -188,7 +193,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              for (final color in categoryColorChoices)
+              for (final color in palette)
                 InkWell(
                   borderRadius: BorderRadius.circular(30),
                   onTap: () => setState(() {
@@ -213,6 +218,33 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                         : null,
                   ),
                 ),
+              InkWell(
+                borderRadius: BorderRadius.circular(30),
+                onTap: _pickCustomColor,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
+                      colors: [
+                        Colors.red,
+                        Colors.yellow,
+                        Colors.green,
+                        Colors.cyan,
+                        Colors.blue,
+                        Colors.purple,
+                        Colors.red,
+                      ],
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.colorize,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -326,6 +358,15 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
     );
   }
 
+  Future<void> _pickCustomColor() async {
+    final color = await showColorWheelDialog(context, colorFromDb(_color));
+    if (color == null) return;
+    setState(() {
+      _dirty = true;
+      _color = color.toARGB32();
+    });
+  }
+
   Future<void> _confirmDiscard() async {
     final discard = await showDialog<bool>(
       context: context,
@@ -394,41 +435,93 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
   }
 
   Future<void> _delete() async {
-    if (_categoryId == null) return;
-    final confirmed = await showDialog<bool>(
+    final id = _categoryId;
+    if (id == null) return;
+    final repo = ref.read(repositoryProvider);
+    final count = await repo.categoryTransactionCount(id);
+    if (!mounted) return;
+
+    if (count == 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete category?'),
+          content: const Text('This cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      await repo.deleteCategoryWithTransactions(id, deleteTransactions: false);
+      _finishDelete();
+      return;
+    }
+
+    final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete category?'),
-        content: const Text(
-          'Transactions in this category will be moved to its parent or become '
-          'uncategorized. Subcategories will also be deleted.',
+        content: Text(
+          '$count transactions are assigned to this category. '
+          'What should happen to them?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('move'),
+            child: const Text('Assign category'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            onPressed: () => Navigator.of(context).pop('delete'),
+            child: const Text('Delete transactions'),
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
-    try {
-      await ref.read(repositoryProvider).deleteCategory(_categoryId!);
-      ref.invalidate(categoriesProvider);
-      ref.invalidate(categoryTreeProvider);
-      ref.invalidate(transactionsProvider);
-      ref.invalidate(statsProvider);
-      _dirty = false;
-      if (mounted) context.pop();
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not delete: $error')));
-      }
+    if (action == null || !mounted) return;
+    if (action == 'delete') {
+      await repo.deleteCategoryWithTransactions(id, deleteTransactions: true);
+      _finishDelete();
+      return;
     }
+
+    final categories = ref.read(categoriesProvider).value ?? const <Category>[];
+    final descendants = (await repo.categoryDescendants(id)).toSet();
+    final possible = categories
+        .where((category) => !descendants.contains(category.id))
+        .toList();
+    if (!mounted) return;
+    final target = await showCategoryPicker(
+      context,
+      possible,
+      initialId: _parentId,
+      allowNone: true,
+    );
+    if (target == null) return;
+    await repo.deleteCategoryWithTransactions(
+      id,
+      deleteTransactions: false,
+      targetCategoryId: target == noCategoryId ? null : target,
+    );
+    _finishDelete();
+  }
+
+  void _finishDelete() {
+    ref.invalidate(categoriesProvider);
+    ref.invalidate(categoryTreeProvider);
+    invalidateTransactionData(ref);
+    _dirty = false;
+    if (mounted) context.pop();
   }
 }

@@ -11,7 +11,7 @@ import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/search_picker.dart';
-import 'transaction_editor_screen.dart' show noCategoryId, showCategoryPicker;
+import '../../widgets/category_picker.dart';
 
 class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({super.key});

@@ -9,8 +9,7 @@ import '../../core/dates.dart';
 import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
-import '../transactions/transaction_editor_screen.dart'
-    show showCategoryPicker, noCategoryId;
+import '../../widgets/category_picker.dart';
 
 class BudgetDetailScreen extends ConsumerStatefulWidget {
   const BudgetDetailScreen({super.key, required this.budgetId});

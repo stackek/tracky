@@ -8,9 +8,8 @@ import '../../core/currency.dart';
 import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
+import '../../widgets/category_picker.dart';
 import '../../widgets/search_picker.dart';
-import '../transactions/transaction_editor_screen.dart'
-    show noCategoryId, showCategoryPicker;
 
 class TemplateEditorScreen extends ConsumerStatefulWidget {
   const TemplateEditorScreen({super.key, this.templateId});

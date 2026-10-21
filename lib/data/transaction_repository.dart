@@ -949,6 +949,206 @@ extension TransactionRepository on Repository {
     });
   }
 
+  Future<List<DebtTransactionEntry>> debtTransactions(
+    int debtId, {
+    DebtTransactionFilter filter = DebtTransactionFilter.all,
+  }) async {
+    final roleCondition = switch (filter) {
+      DebtTransactionFilter.all => '',
+      DebtTransactionFilter.increasing => 'AND dt.resolving = 0',
+      DebtTransactionFilter.resolving => 'AND dt.resolving = 1',
+    };
+    final rows = await db.rawQuery('''
+      WITH debt_tx AS (
+        SELECT transaction_id AS id, 0 AS resolving
+        FROM app_debt_transactions
+        WHERE debt_id = ? AND role = 'creation'
+        UNION
+        SELECT _id AS id, 1 AS resolving
+        FROM transactions
+        WHERE debt_id = ?
+      )
+      SELECT t._id, t.comment, t.date, t.value_date, t.amount, t.cat_id,
+             t.account_id, t.payee_id, t.transfer_peer, t.transfer_account,
+             t.method_id, t.parent_id, t.status, t.cr_status, t.number, t.uuid,
+             t.original_amount, t.original_currency, t.debt_id,
+             dt.resolving AS debt_resolving,
+             c.label AS cat_label, c.label AS cat_path,
+             c.icon AS cat_icon, c.color AS cat_color, c.type AS cat_type,
+             p.name AS payee_name, m.label AS method_label,
+             a.label AS account_label, a.currency AS currency,
+             ta.label AS transfer_account_label,
+             ta.currency AS transfer_account_currency,
+             (SELECT group_concat(tt.tag_id, ',') FROM transactions_tags tt
+                WHERE tt.transaction_id = t._id) AS tag_ids,
+             (SELECT count(*) FROM transaction_attachments x
+                WHERE x.transaction_id = t._id) AS attachment_count,
+             (SELECT count(*) FROM transactions ch
+                WHERE ch.parent_id = t._id) AS split_count
+      FROM debt_tx dt
+      JOIN transactions t ON t._id = dt.id
+      LEFT JOIN categories c ON c._id = t.cat_id
+      LEFT JOIN payee p ON p._id = t.payee_id
+      LEFT JOIN paymentmethods m ON m._id = t.method_id
+      LEFT JOIN accounts a ON a._id = t.account_id
+      LEFT JOIN accounts ta ON ta._id = t.transfer_account
+      WHERE t.status != $statusVoid
+        AND t.status != $statusArchived
+        AND t.cr_status != 'VOID'
+        $roleCondition
+      ORDER BY t.date DESC, t._id DESC
+    ''', [debtId, debtId]);
+    return [
+      for (final row in rows)
+        DebtTransactionEntry(
+          transaction: Transaction.fromMap(row),
+          resolving: asBool(row['debt_resolving']),
+        ),
+    ];
+  }
+
+  Future<void> removeDebt(
+    int debtId, {
+    required DebtRemovalAction action,
+    int? targetDebtId,
+  }) async {
+    await db.transaction((txn) async {
+      final creationRows = await txn.query(
+        'app_debt_transactions',
+        columns: ['transaction_id'],
+        where: "debt_id = ? AND role = 'creation'",
+        whereArgs: [debtId],
+      );
+      final resolvingRows = await txn.query(
+        'transactions',
+        columns: ['_id'],
+        where: 'debt_id = ?',
+        whereArgs: [debtId],
+      );
+      final ids = <int>{
+        for (final row in creationRows)
+          asIntOr(row['transaction_id'], 0),
+        for (final row in resolvingRows) asIntOr(row['_id'], 0),
+      }..remove(0);
+      final placeholders = List.filled(ids.length, '?').join(',');
+
+      switch (action) {
+        case DebtRemovalAction.deleteTransactions:
+          if (ids.isNotEmpty) {
+            final rows = await txn.rawQuery(
+              'SELECT _id, parent_id FROM transactions '
+              'WHERE _id IN ($placeholders)',
+              ids.toList(),
+            );
+            final roots = <int>{};
+            for (final row in rows) {
+              final parentId = asInt(row['parent_id']);
+              roots.add(parentId ?? asIntOr(row['_id'], 0));
+            }
+            for (final rootId in roots) {
+              await _deleteWithTxn(txn, rootId);
+            }
+          }
+        case DebtRemovalAction.reassign:
+          if (targetDebtId == null || targetDebtId == debtId) {
+            return;
+          }
+          if (ids.isNotEmpty) {
+            await txn.rawUpdate(
+              'UPDATE transactions SET debt_id = ? '
+              'WHERE _id IN ($placeholders)',
+              [targetDebtId, ...ids],
+            );
+          }
+          await txn.delete(
+            'app_debt_transactions',
+            where: 'debt_id = ?',
+            whereArgs: [debtId],
+          );
+        case DebtRemovalAction.detach:
+          if (ids.isNotEmpty) {
+            await txn.rawUpdate(
+              'UPDATE transactions SET debt_id = NULL '
+              'WHERE _id IN ($placeholders)',
+              ids.toList(),
+            );
+          }
+          await txn.delete(
+            'app_debt_transactions',
+            where: 'debt_id = ?',
+            whereArgs: [debtId],
+          );
+      }
+      await txn.delete('debts', where: '_id = ?', whereArgs: [debtId]);
+    });
+  }
+
+  Future<int> categoryTransactionCount(int categoryId) async {
+    final ids = await categoryDescendants(categoryId);
+    if (ids.isEmpty) return 0;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS n FROM transactions WHERE cat_id IN ($placeholders)',
+      ids,
+    );
+    return rows.isEmpty ? 0 : asIntOr(rows.first['n'], 0);
+  }
+
+  Future<void> deleteCategoryWithTransactions(
+    int categoryId, {
+    required bool deleteTransactions,
+    int? targetCategoryId,
+  }) async {
+    final category = await this.category(categoryId);
+    if (category == null) return;
+    final ids = await categoryDescendants(categoryId);
+    if (ids.isEmpty) return;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.transaction((txn) async {
+      if (deleteTransactions) {
+        final rows = await txn.rawQuery(
+          'SELECT _id, parent_id FROM transactions WHERE cat_id IN ($placeholders)',
+          ids,
+        );
+        final roots = <int>{};
+        for (final row in rows) {
+          final parentId = asInt(row['parent_id']);
+          roots.add(parentId ?? asIntOr(row['_id'], 0));
+        }
+        for (final rootId in roots) {
+          await _deleteWithTxn(txn, rootId);
+        }
+        await txn.rawUpdate(
+          'UPDATE templates SET cat_id = NULL WHERE cat_id IN ($placeholders)',
+          ids,
+        );
+      } else {
+        await txn.rawUpdate(
+          'UPDATE transactions SET cat_id = ? WHERE cat_id IN ($placeholders)',
+          [targetCategoryId, ...ids],
+        );
+        await txn.rawUpdate(
+          'UPDATE templates SET cat_id = ? WHERE cat_id IN ($placeholders)',
+          [targetCategoryId, ...ids],
+        );
+      }
+      final parentId = category.parentId == category.id
+          ? null
+          : category.parentId;
+      await txn.update(
+        'categories',
+        {'parent_id': parentId},
+        where: 'parent_id = ? AND _id != ?',
+        whereArgs: [category.id, category.id],
+      );
+      await txn.delete(
+        'categories',
+        where: '_id = ?',
+        whereArgs: [categoryId],
+      );
+    });
+  }
+
   Future<void> _deleteWithTxn(DatabaseExecutor txn, int id) async {
     final rows = await txn.query(
       'transactions',

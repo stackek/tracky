@@ -694,6 +694,15 @@ class Repository {
     await db.delete('debts', where: '_id = ?', whereArgs: [id]);
   }
 
+  Future<void> setDebtArchived(int id, bool archived) async {
+    await db.update(
+      'debts',
+      {'sealed': archived ? 1 : 0},
+      where: '_id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<int?> createdDebtIdForTransaction(int transactionId) async {
     final rows = await db.query(
       'app_debt_transactions',
