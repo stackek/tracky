@@ -182,8 +182,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     isLabelVisible:
                         filter.categoryId != null ||
                         filter.payeeId != null ||
-                        filter.from != null ||
-                        filter.includeArchived,
+                        filter.tagId != null ||
+                        filter.minAmount != null ||
+                        filter.maxAmount != null ||
+                        filter.flow != TransactionFlowFilter.both ||
+                        filter.voidFilter != TransactionVoidFilter.both ||
+                        filter.period != TransactionPeriod.thisMonth,
                     child: const Icon(Icons.tune),
                   ),
                   onPressed: () => _showFilterSheet(context),
@@ -871,13 +875,27 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   Future<void> _showFilterSheet(BuildContext context) async {
     final categories = ref.read(categoriesProvider).value ?? const <Category>[];
     final payees = ref.read(payeesProvider).value ?? const <Payee>[];
+    final tags = ref.read(tagsProvider).value ?? const <Tag>[];
     final filter = ref.read(transactionFilterProvider);
+    final home = ref.read(settingsProvider).homeCurrency;
     var categoryId = filter.categoryId;
     var payeeId = filter.payeeId;
+    var tagId = filter.tagId;
     var from = filter.from;
     var to = filter.to;
     var period = filter.period;
-    var includeArchived = filter.includeArchived;
+    var flow = filter.flow;
+    var voidFilter = filter.voidFilter;
+    final minAmountController = TextEditingController(
+      text: filter.minAmount == null
+          ? ''
+          : formatMoneyPlain(filter.minAmount!, home),
+    );
+    final maxAmountController = TextEditingController(
+      text: filter.maxAmount == null
+          ? ''
+          : formatMoneyPlain(filter.maxAmount!, home),
+    );
 
     await showModalBottomSheet<void>(
       context: context,
@@ -1020,12 +1038,134 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                SwitchListTile(
+                ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Include archived'),
-                  value: includeArchived,
-                  onChanged: (value) =>
-                      setModalState(() => includeArchived = value),
+                  leading: const Icon(Icons.sell_outlined),
+                  title: const Text('Tag'),
+                  subtitle: Text(
+                    tagId == null
+                        ? 'Any tag'
+                        : tags
+                                  .where((tag) => tag.id == tagId)
+                                  .firstOrNull
+                                  ?.label ??
+                              'Any tag',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final selected = await showSearchPicker<int>(
+                      context: context,
+                      title: 'Tag',
+                      hint: 'Search tags',
+                      selected: tagId ?? -1,
+                      allowNone: true,
+                      noneLabel: 'Any tag',
+                      noneValue: -1,
+                      entries: [
+                        for (final tag in tags)
+                          PickerEntry(
+                            value: tag.id,
+                            label: tag.label,
+                            icon: Icons.sell_outlined,
+                            color: tag.color == null
+                                ? null
+                                : colorFromDb(tag.color!),
+                          ),
+                      ],
+                    );
+                    if (selected == null) return;
+                    setModalState(
+                      () => tagId = selected == -1 ? null : selected,
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<TransactionFlowFilter>(
+                  initialValue: flow,
+                  decoration: const InputDecoration(
+                    labelText: 'Type',
+                    prefixIcon: Icon(Icons.swap_vert),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: TransactionFlowFilter.both,
+                      child: Text('Income and expenses'),
+                    ),
+                    DropdownMenuItem(
+                      value: TransactionFlowFilter.income,
+                      child: Text('Income only'),
+                    ),
+                    DropdownMenuItem(
+                      value: TransactionFlowFilter.expense,
+                      child: Text('Expenses only'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setModalState(() => flow = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<TransactionVoidFilter>(
+                  initialValue: voidFilter,
+                  decoration: const InputDecoration(
+                    labelText: 'Void',
+                    prefixIcon: Icon(Icons.cancel_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: TransactionVoidFilter.both,
+                      child: Text('Void and non-void'),
+                    ),
+                    DropdownMenuItem(
+                      value: TransactionVoidFilter.voidOnly,
+                      child: Text('Void only'),
+                    ),
+                    DropdownMenuItem(
+                      value: TransactionVoidFilter.nonVoid,
+                      child: Text('Not void'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setModalState(() => voidFilter = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: minAmountController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Min amount',
+                          suffixText: home,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: maxAmountController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Max amount',
+                          suffixText: home,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -1046,14 +1186,26 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           final notifier = ref.read(
                             transactionFilterProvider.notifier,
                           );
+                          final minText = minAmountController.text.trim();
+                          final maxText = maxAmountController.text.trim();
                           notifier.setCategory(categoryId);
                           notifier.setPayee(payeeId);
+                          notifier.setTag(tagId);
+                          notifier.setFlow(flow);
+                          notifier.setVoidFilter(voidFilter);
+                          notifier.setAmountRange(
+                            minText.isEmpty
+                                ? null
+                                : parseAmountToMinor(minText, home)?.abs(),
+                            maxText.isEmpty
+                                ? null
+                                : parseAmountToMinor(maxText, home)?.abs(),
+                          );
                           if (period == TransactionPeriod.custom) {
                             notifier.setDates(from, to);
                           } else {
                             notifier.setPeriod(period);
                           }
-                          notifier.setIncludeArchived(includeArchived);
                           Navigator.of(context).pop();
                         },
                         child: const Text('Apply'),
@@ -1067,6 +1219,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         ),
       ),
     );
+    disposeAfterDialog([minAmountController, maxAmountController]);
   }
 }
 

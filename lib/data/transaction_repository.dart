@@ -83,13 +83,21 @@ class TransactionDraft {
 }
 
 extension TransactionRepository on Repository {
-  Future<List<Transaction>> transactions(TransactionFilter filter) async {
+  Future<List<Transaction>> transactions(
+    TransactionFilter filter, {
+    bool includeArchived = false,
+  }) async {
     final args = <Object?>[];
-    final conditions = <String>[
-      't.parent_id IS NULL',
-      't.status != $statusVoid',
-    ];
-    if (!filter.includeArchived) conditions.add('t.status != $statusArchived');
+    final conditions = <String>['t.parent_id IS NULL'];
+    switch (filter.voidFilter) {
+      case TransactionVoidFilter.both:
+        break;
+      case TransactionVoidFilter.voidOnly:
+        conditions.add('t.status = $statusVoid');
+      case TransactionVoidFilter.nonVoid:
+        conditions.add('t.status != $statusVoid');
+    }
+    if (!includeArchived) conditions.add('t.status != $statusArchived');
     if (filter.accountId != null) {
       conditions.add('t.account_id = ?');
       args.add(filter.accountId);
@@ -97,6 +105,29 @@ extension TransactionRepository on Repository {
     if (filter.payeeId != null) {
       conditions.add('t.payee_id = ?');
       args.add(filter.payeeId);
+    }
+    if (filter.tagId != null) {
+      conditions.add(
+        'EXISTS (SELECT 1 FROM transactions_tags tt '
+        'WHERE tt.transaction_id = t._id AND tt.tag_id = ?)',
+      );
+      args.add(filter.tagId);
+    }
+    if (filter.minAmount != null) {
+      conditions.add('ABS(t.amount) >= ?');
+      args.add(filter.minAmount);
+    }
+    if (filter.maxAmount != null) {
+      conditions.add('ABS(t.amount) <= ?');
+      args.add(filter.maxAmount);
+    }
+    switch (filter.flow) {
+      case TransactionFlowFilter.both:
+        break;
+      case TransactionFlowFilter.income:
+        conditions.add('t.amount > 0');
+      case TransactionFlowFilter.expense:
+        conditions.add('t.amount < 0');
     }
     if (filter.categoryId != null) {
       final ids = await categoryDescendants(filter.categoryId!);
@@ -201,12 +232,6 @@ extension TransactionRepository on Repository {
   }
 
   Future<Transaction?> transaction(int id) async {
-    final list = await transactions(
-      const TransactionFilter(includeArchived: true).copyWith(),
-    );
-    for (final transaction in list) {
-      if (transaction.id == id) return transaction;
-    }
     final rows = await db.rawQuery(
       '''
       SELECT t.*, c.label AS cat_label, c.type AS cat_type, c.icon AS cat_icon,

@@ -469,6 +469,10 @@ class Transaction {
 
 enum StatsType { expense, income }
 
+enum TransactionFlowFilter { both, income, expense }
+
+enum TransactionVoidFilter { both, voidOnly, nonVoid }
+
 enum TransactionPeriod { all, thisMonth, lastMonth, last3Months, thisYear, custom }
 
 extension TransactionPeriodLabel on TransactionPeriod {
@@ -498,7 +502,11 @@ class TransactionFilter {
     this.to,
     this.categoryId,
     this.payeeId,
-    this.includeArchived = false,
+    this.tagId,
+    this.minAmount,
+    this.maxAmount,
+    this.flow = TransactionFlowFilter.both,
+    this.voidFilter = TransactionVoidFilter.both,
     this.period = TransactionPeriod.thisMonth,
   });
 
@@ -508,7 +516,11 @@ class TransactionFilter {
   final DateTime? to;
   final int? categoryId;
   final int? payeeId;
-  final bool includeArchived;
+  final int? tagId;
+  final int? minAmount;
+  final int? maxAmount;
+  final TransactionFlowFilter flow;
+  final TransactionVoidFilter voidFilter;
   final TransactionPeriod period;
 
   DateTime? get effectiveFrom {
@@ -558,7 +570,15 @@ class TransactionFilter {
     bool clearCategory = false,
     int? payeeId,
     bool clearPayee = false,
-    bool? includeArchived,
+    int? tagId,
+    bool clearTag = false,
+    int? minAmount,
+    bool clearMinAmount = false,
+    int? maxAmount,
+    bool clearMaxAmount = false,
+    bool clearAmounts = false,
+    TransactionFlowFilter? flow,
+    TransactionVoidFilter? voidFilter,
     TransactionPeriod? period,
   }) =>
       TransactionFilter(
@@ -568,7 +588,15 @@ class TransactionFilter {
         to: clearDates ? null : (to ?? this.to),
         categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
         payeeId: clearPayee ? null : (payeeId ?? this.payeeId),
-        includeArchived: includeArchived ?? this.includeArchived,
+        tagId: clearTag ? null : (tagId ?? this.tagId),
+        minAmount: clearAmounts || clearMinAmount
+            ? null
+            : (minAmount ?? this.minAmount),
+        maxAmount: clearAmounts || clearMaxAmount
+            ? null
+            : (maxAmount ?? this.maxAmount),
+        flow: flow ?? this.flow,
+        voidFilter: voidFilter ?? this.voidFilter,
         period: period ?? this.period,
       );
 
@@ -579,8 +607,12 @@ class TransactionFilter {
       to != null ||
       categoryId != null ||
       payeeId != null ||
-      includeArchived ||
-      period != TransactionPeriod.lastMonth;
+      tagId != null ||
+      minAmount != null ||
+      maxAmount != null ||
+      flow != TransactionFlowFilter.both ||
+      voidFilter != TransactionVoidFilter.both ||
+      period != TransactionPeriod.thisMonth;
 }
 
 enum DebtMode { none, create, resolve }

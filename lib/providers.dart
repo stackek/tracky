@@ -128,17 +128,39 @@ class TransactionFilterNotifier extends Notifier<TransactionFilter> {
   }
 
   void setDates(DateTime? from, DateTime? to) {
-    state = from == null && to == null
+    final end = to == null
+        ? null
+        : DateTime(to.year, to.month, to.day, 23, 59, 59);
+    state = from == null && end == null
         ? state.copyWith(clearDates: true)
-        : state.copyWith(from: from, to: to, period: TransactionPeriod.custom);
+        : state.copyWith(from: from, to: end, period: TransactionPeriod.custom);
   }
 
   void setPeriod(TransactionPeriod period) {
-    state = state.copyWith(period: period);
+    state = period == TransactionPeriod.custom
+        ? state.copyWith(period: period)
+        : state.copyWith(period: period, clearDates: true);
   }
 
-  void setIncludeArchived(bool value) =>
-      state = state.copyWith(includeArchived: value);
+  void setTag(int? tagId) {
+    state = tagId == null
+        ? state.copyWith(clearTag: true)
+        : state.copyWith(tagId: tagId);
+  }
+
+  void setAmountRange(int? minAmount, int? maxAmount) {
+    state = state.copyWith(
+      minAmount: minAmount,
+      maxAmount: maxAmount,
+      clearAmounts: minAmount == null && maxAmount == null,
+    );
+  }
+
+  void setFlow(TransactionFlowFilter flow) =>
+      state = state.copyWith(flow: flow);
+
+  void setVoidFilter(TransactionVoidFilter value) =>
+      state = state.copyWith(voidFilter: value);
 
   void clear() => state = const TransactionFilter();
 }

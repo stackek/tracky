@@ -24,7 +24,11 @@ class CsvService {
 
   Future<File> export(File target) async {
     final transactions = await repository.transactions(
-      const TransactionFilter(includeArchived: true),
+      const TransactionFilter(
+        period: TransactionPeriod.all,
+        voidFilter: TransactionVoidFilter.nonVoid,
+      ),
+      includeArchived: true,
     );
     final rows = <List<Object?>>[
       [
