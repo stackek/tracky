@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/currency.dart';
 import '../../core/dates.dart';
@@ -142,7 +143,18 @@ class StatsScreen extends ConsumerWidget {
                         : 'Add an expense to see the breakdown by category.',
                   )
                 else
-                  _CategoryBreakdown(data: data, type: statsType),
+                  _CategoryBreakdown(
+                    data: data,
+                    type: statsType,
+                    onOpenCategory: (category) => _openCategory(
+                      context,
+                      ref,
+                      category,
+                      month,
+                      range,
+                      accountId,
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 Center(
                   child: Text(
@@ -167,6 +179,28 @@ class StatsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _openCategory(
+    BuildContext context,
+    WidgetRef ref,
+    CategoryTotal category,
+    DateTime month,
+    DateTimeRange? range,
+    int? accountId,
+  ) {
+    final notifier = ref.read(transactionFilterProvider.notifier);
+    notifier.clear();
+    if (accountId != null) notifier.setAccount(accountId);
+    if (category.categoryId > 1) {
+      notifier.setCategory(category.categoryId);
+    }
+    final from = range?.start ?? DateTime(month.year, month.month, 1);
+    final to = range == null
+        ? DateTime(month.year, month.month + 1, 0, 23, 59, 59)
+        : DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
+    notifier.setDates(from, to);
+    context.go('/transactions');
   }
 
   Future<void> _pickRange(
@@ -475,10 +509,15 @@ class _BigCard extends StatelessWidget {
 }
 
 class _CategoryBreakdown extends StatefulWidget {
-  const _CategoryBreakdown({required this.data, required this.type});
+  const _CategoryBreakdown({
+    required this.data,
+    required this.type,
+    required this.onOpenCategory,
+  });
 
   final StatsData data;
   final StatsType type;
+  final ValueChanged<CategoryTotal> onOpenCategory;
 
   @override
   State<_CategoryBreakdown> createState() => _CategoryBreakdownState();
@@ -625,6 +664,8 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
             onTap: () => setState(
               () => _selectedIndex = _selectedIndex == i ? -1 : i,
             ),
+            onDoubleTap: () =>
+                widget.onOpenCategory(widget.data.byCategory[i]),
           ),
       ],
     );
@@ -639,6 +680,7 @@ class _CategoryRow extends StatelessWidget {
     required this.total,
     required this.selected,
     required this.onTap,
+    required this.onDoubleTap,
   });
 
   final CategoryTotal category;
@@ -647,6 +689,7 @@ class _CategoryRow extends StatelessWidget {
   final int total;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -660,6 +703,7 @@ class _CategoryRow extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
+        onDoubleTap: onDoubleTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
