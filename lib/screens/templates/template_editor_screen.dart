@@ -277,9 +277,22 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: FilledButton(
-            onPressed: () => _save(currency),
-            child: const Text('Save template'),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _save(currency),
+                  child: const Text('Save'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => _save(currency, addTransaction: true),
+                  child: const Text('Save & add'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -386,7 +399,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     }
   }
 
-  Future<void> _save(String currency) async {
+  Future<void> _save(String currency, {bool addTransaction = false}) async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(
@@ -404,8 +417,9 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     final signedAmount = (_transfer || !_income) ? -amount.abs() : amount.abs();
     final repo = ref.read(repositoryProvider);
     try {
+      final int templateId;
       if (_templateId == null) {
-        await repo.insertTemplate(
+        templateId = await repo.insertTemplate(
           title: title,
           comment: _commentController.text.trim(),
           amount: signedAmount,
@@ -416,8 +430,9 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           transferAccount: _transfer ? _targetAccountId : null,
         );
       } else {
+        templateId = _templateId!;
         await repo.updateTemplate(
-          _templateId!,
+          templateId,
           title: title,
           comment: _commentController.text.trim(),
           amount: signedAmount,
@@ -429,7 +444,16 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
         );
       }
       ref.invalidate(templatesProvider);
-      if (mounted) context.pop();
+      if (!addTransaction) {
+        if (mounted) context.pop();
+        return;
+      }
+      final template = await repo.template(templateId);
+      if (template == null) return;
+      final transactionId = await repo.applyTemplate(template);
+      invalidateTransactionData(ref);
+      ref.invalidate(templatesProvider);
+      if (mounted) context.pushReplacement('/edit?tx=$transactionId');
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)

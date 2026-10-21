@@ -67,59 +67,39 @@ class TemplatesScreen extends ConsumerWidget {
                           formatMoney(template.amount, template.currency),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        PopupMenuButton<String>(
-                          onSelected: (value) async {
-                            if (value == 'apply') {
-                              final id = await ref
-                                  .read(repositoryProvider)
-                                  .applyTemplate(template);
-                              ref.invalidate(transactionsProvider);
-                              ref.invalidate(accountsProvider);
-                              ref.invalidate(statsProvider);
-                              ref.invalidate(templatesProvider);
-                              if (context.mounted) {
-                                context.push('/edit?tx=$id');
-                              }
-                            } else if (value == 'edit') {
-                              context.push('/template/edit?id=${template.id}');
-                            } else if (value == 'delete') {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: Text('Delete ${template.title}?'),
-                                  content: const Text(
-                                    'The template will be deleted. Transactions '
-                                    'already created from it are kept.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(true),
-                                      child: const Text('Delete'),
-                                    ),
-                                  ],
+                        IconButton(
+                          tooltip: 'Delete template',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: Text('Delete ${template.title}?'),
+                                content: const Text(
+                                  'The template will be deleted. Transactions '
+                                  'already created from it are kept.',
                                 ),
-                              );
-                              if (confirmed == true) {
-                                await ref
-                                    .read(repositoryProvider)
-                                    .deleteTemplate(template.id);
-                                ref.invalidate(templatesProvider);
-                              }
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(true),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              await ref
+                                  .read(repositoryProvider)
+                                  .deleteTemplate(template.id);
+                              ref.invalidate(templatesProvider);
                             }
                           },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                                value: 'apply', child: Text('Use template')),
-                            PopupMenuItem(value: 'edit', child: Text('Edit')),
-                            PopupMenuItem(
-                                value: 'delete', child: Text('Delete')),
-                          ],
                         ),
                       ],
                     ),
