@@ -6,6 +6,7 @@ import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/search_picker.dart';
 
 class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
@@ -51,7 +52,8 @@ class CategoriesScreen extends ConsumerWidget {
                 icon: Icons.north_east,
                 onAdd: () => context.push('/category/edit?type=1'),
               ),
-              for (final category in expenses) _CategoryTile(category: category),
+              for (final category in expenses)
+                _CategoryTile(category: category),
               if (incomes.isNotEmpty) ...[
                 _SectionHeader(
                   title: 'Income',
@@ -93,9 +95,8 @@ class _SectionHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const Spacer(),
           IconButton(
@@ -124,30 +125,42 @@ class _CategoryTile extends ConsumerWidget {
       title: _title(context, category),
       childrenPadding: const EdgeInsets.only(left: 16),
       children: [
-        for (final child in category.children)
-          _row(context, ref, child, 1),
+        for (final child in category.children) _row(context, ref, child, 1),
       ],
     );
   }
 
-  Widget _row(
-    BuildContext context,
-    WidgetRef ref,
-    Category item,
-    int depth,
-  ) {
+  Widget _row(BuildContext context, WidgetRef ref, Category item, int depth) {
     return ListTile(
       contentPadding: EdgeInsets.only(left: 16 + depth * 28.0, right: 8),
       leading: _icon(item),
       title: _title(context, item),
-      subtitle: item.usages == 0
-          ? null
-          : Text('${item.usages} transactions'),
-      trailing: PopupMenuButton<String>(
-        onSelected: (value) async {
-          if (value == 'edit') {
+      subtitle: item.usages == 0 ? null : Text('${item.usages} transactions'),
+      trailing: IconButton(
+        tooltip: 'More',
+        icon: const Icon(Icons.more_vert),
+        onPressed: () async {
+          final action = await showActionSheet<String>(
+            context,
+            title: item.label,
+            actions: const [
+              SheetAction(
+                value: 'edit',
+                label: 'Edit',
+                icon: Icons.edit_outlined,
+              ),
+              SheetAction(
+                value: 'delete',
+                label: 'Delete',
+                icon: Icons.delete_outline,
+                destructive: true,
+              ),
+            ],
+          );
+          if (!context.mounted) return;
+          if (action == 'edit') {
             context.push('/category/edit?id=${item.id}');
-          } else if (value == 'delete') {
+          } else if (action == 'delete') {
             final confirmed = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
@@ -185,10 +198,6 @@ class _CategoryTile extends ConsumerWidget {
             }
           }
         },
-        itemBuilder: (context) => [
-          const PopupMenuItem(value: 'edit', child: Text('Edit')),
-          const PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
       ),
       onTap: () => context.push('/category/edit?id=${item.id}'),
     );

@@ -8,6 +8,8 @@ import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/search_picker.dart';
+import 'transaction_editor_screen.dart' show noCategoryId, showCategoryPicker;
 
 class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({super.key});
@@ -216,39 +218,73 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int?>(
-                initialValue: categoryId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('Any category'),
-                  ),
-                  ...categories.map(
-                    (category) => DropdownMenuItem(
-                      value: category.id,
-                      child: Text(category.displayPath),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setModalState(() => categoryId = value),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.category_outlined),
+                title: const Text('Category'),
+                subtitle: Text(
+                  categoryId == null
+                      ? 'Any category'
+                      : categories
+                                .where((category) => category.id == categoryId)
+                                .firstOrNull
+                                ?.displayPath ??
+                            'Any category',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final selected = await showCategoryPicker(
+                    context,
+                    categories,
+                    initialId: categoryId,
+                    allowNone: true,
+                  );
+                  if (selected == null) return;
+                  setModalState(
+                    () =>
+                        categoryId = selected == noCategoryId ? null : selected,
+                  );
+                },
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<int?>(
-                initialValue: payeeId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Payee'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Any payee')),
-                  ...payees.map(
-                    (payee) => DropdownMenuItem(
-                      value: payee.id,
-                      child: Text(payee.name),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setModalState(() => payeeId = value),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.person_outline),
+                title: const Text('Payee'),
+                subtitle: Text(
+                  payeeId == null
+                      ? 'Any payee'
+                      : payees
+                                .where((payee) => payee.id == payeeId)
+                                .firstOrNull
+                                ?.name ??
+                            'Any payee',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final selected = await showSearchPicker<int>(
+                    context: context,
+                    title: 'Payee',
+                    hint: 'Search payees',
+                    selected: payeeId ?? -1,
+                    allowNone: true,
+                    noneLabel: 'Any payee',
+                    noneValue: -1,
+                    entries: [
+                      for (final payee in payees)
+                        PickerEntry(
+                          value: payee.id,
+                          label: payee.name,
+                          subtitle: payee.iban,
+                          icon: Icons.person_outline,
+                        ),
+                    ],
+                  );
+                  if (selected == null) return;
+                  setModalState(
+                    () => payeeId = selected == -1 ? null : selected,
+                  );
+                },
               ),
               const SizedBox(height: 12),
               Row(

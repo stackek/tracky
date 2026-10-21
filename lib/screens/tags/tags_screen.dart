@@ -6,6 +6,7 @@ import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/search_picker.dart';
 
 class TagsScreen extends ConsumerWidget {
   const TagsScreen({super.key});
@@ -35,11 +36,31 @@ class TagsScreen extends ConsumerWidget {
                     leading: const Icon(Icons.sell_outlined),
                     title: Text(tag.label),
                     onTap: () => _edit(context, ref, tag),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) async {
-                        if (value == 'edit') {
+                    trailing: IconButton(
+                      tooltip: 'More',
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () async {
+                        final action = await showActionSheet<String>(
+                          context,
+                          title: tag.label,
+                          actions: const [
+                            SheetAction(
+                              value: 'edit',
+                              label: 'Edit',
+                              icon: Icons.edit_outlined,
+                            ),
+                            SheetAction(
+                              value: 'delete',
+                              label: 'Delete',
+                              icon: Icons.delete_outline,
+                              destructive: true,
+                            ),
+                          ],
+                        );
+                        if (!context.mounted) return;
+                        if (action == 'edit') {
                           await _edit(context, ref, tag);
-                        } else if (value == 'delete') {
+                        } else if (action == 'delete') {
                           final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
@@ -62,16 +83,14 @@ class TagsScreen extends ConsumerWidget {
                             ),
                           );
                           if (confirmed == true) {
-                            await ref.read(repositoryProvider).deleteTag(tag.id);
+                            await ref
+                                .read(repositoryProvider)
+                                .deleteTag(tag.id);
                             ref.invalidate(tagsProvider);
                             ref.invalidate(transactionsProvider);
                           }
                         }
                       },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      ],
                     ),
                   );
                 },
@@ -148,11 +167,31 @@ class PaymentMethodsScreen extends ConsumerWidget {
                     leading: Icon(iconForPaymentMethod(method.icon)),
                     title: Text(method.displayName),
                     onTap: () => _edit(context, ref, method),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) async {
-                        if (value == 'edit') {
+                    trailing: IconButton(
+                      tooltip: 'More',
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () async {
+                        final action = await showActionSheet<String>(
+                          context,
+                          title: method.displayName,
+                          actions: const [
+                            SheetAction(
+                              value: 'edit',
+                              label: 'Edit',
+                              icon: Icons.edit_outlined,
+                            ),
+                            SheetAction(
+                              value: 'delete',
+                              label: 'Delete',
+                              icon: Icons.delete_outline,
+                              destructive: true,
+                            ),
+                          ],
+                        );
+                        if (!context.mounted) return;
+                        if (action == 'edit') {
                           await _edit(context, ref, method);
-                        } else if (value == 'delete') {
+                        } else if (action == 'delete') {
                           final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
@@ -184,10 +223,6 @@ class PaymentMethodsScreen extends ConsumerWidget {
                           }
                         }
                       },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      ],
                     ),
                   );
                 },
@@ -208,7 +243,9 @@ class PaymentMethodsScreen extends ConsumerWidget {
     await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(method == null ? 'New payment method' : 'Edit payment method'),
+        title: Text(
+          method == null ? 'New payment method' : 'Edit payment method',
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
+import '../../widgets/search_picker.dart';
 
 class CategoryEditorScreen extends ConsumerStatefulWidget {
   const CategoryEditorScreen({
@@ -69,17 +70,20 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final categories = ref.watch(categoriesProvider).value ?? const <Category>[];
+    final categories =
+        ref.watch(categoriesProvider).value ?? const <Category>[];
     final possibleParents = categories
         .where((category) => category.id != _categoryId)
         .where((category) => category.type == _type)
         .toList();
     final query = _iconSearch.trim().toLowerCase();
     final iconChoices = allCategoryIcons
-        .where((entry) =>
-            query.isEmpty ||
-            entry.key.toLowerCase().contains(query) ||
-            iconSearchLabel(entry.key).toLowerCase().contains(query))
+        .where(
+          (entry) =>
+              query.isEmpty ||
+              entry.key.toLowerCase().contains(query) ||
+              iconSearchLabel(entry.key).toLowerCase().contains(query),
+        )
         .toList();
     return Scaffold(
       appBar: AppBar(
@@ -117,28 +121,52 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                   setState(() => _type = value.first),
             ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<int?>(
-            initialValue: _parentId,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Parent category',
-              prefixIcon: Icon(Icons.account_tree_outlined),
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None (top level)')),
-              ...possibleParents.map(
-                (category) => DropdownMenuItem(
-                  value: category.id,
-                  child: Text(category.displayPath),
-                ),
-              ),
-            ],
-            onChanged: (value) => setState(() {
-              _parentId = value;
-              final parent =
-                  possibleParents.where((category) => category.id == value).firstOrNull;
-              if (parent != null) _type = parent.type;
-            }),
+            tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+            leading: const Icon(Icons.account_tree_outlined),
+            title: const Text('Parent category'),
+            subtitle: Text(
+              _parentId == null
+                  ? 'None (top level)'
+                  : possibleParents
+                            .where((category) => category.id == _parentId)
+                            .firstOrNull
+                            ?.displayPath ??
+                        'None (top level)',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final value = await showSearchPicker<int>(
+                context: context,
+                title: 'Parent category',
+                hint: 'Search categories',
+                selected: _parentId ?? -1,
+                allowNone: true,
+                noneLabel: 'None (top level)',
+                noneValue: -1,
+                entries: [
+                  for (final category in possibleParents)
+                    PickerEntry(
+                      value: category.id,
+                      label: category.label,
+                      subtitle: category.displayPath,
+                      icon: iconForCategory(category.icon),
+                      color: colorFromDb(category.color),
+                    ),
+                ],
+              );
+              if (value == null) return;
+              setState(() {
+                _parentId = value == -1 ? null : value;
+                final parent = possibleParents
+                    .where((category) => category.id == _parentId)
+                    .firstOrNull;
+                if (parent != null) _type = parent.type;
+              });
+            },
           ),
           const SizedBox(height: 20),
           Text('Colour', style: Theme.of(context).textTheme.titleSmall),
@@ -213,10 +241,10 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                     padding: const EdgeInsets.all(10),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 6,
-                      mainAxisSpacing: 6,
-                      crossAxisSpacing: 6,
-                    ),
+                          crossAxisCount: 6,
+                          mainAxisSpacing: 6,
+                          crossAxisSpacing: 6,
+                        ),
                     itemCount: iconChoices.length,
                     itemBuilder: (context, index) {
                       final entry = iconChoices[index];
@@ -227,13 +255,14 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: selected
-                                ? colorFromDb(_color)
-                                    .withValues(alpha: 0.22)
+                                ? colorFromDb(_color).withValues(alpha: 0.22)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(10),
                             border: selected
                                 ? Border.all(
-                                    color: colorFromDb(_color), width: 2)
+                                    color: colorFromDb(_color),
+                                    width: 2,
+                                  )
                                 : null,
                           ),
                           child: Tooltip(
@@ -243,8 +272,8 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                               color: selected
                                   ? colorFromDb(_color)
                                   : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                                        .colorScheme
+                                        .onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -280,9 +309,9 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
   Future<void> _save() async {
     final label = _labelController.text.trim();
     if (label.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a category name.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a category name.')));
       return;
     }
     final repo = ref.read(repositoryProvider);
@@ -313,9 +342,8 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
       if (mounted) context.pop();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $error')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not save: $error')));
       }
     }
   }
@@ -352,9 +380,8 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
       if (mounted) context.pop();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not delete: $error')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not delete: $error')));
       }
     }
   }

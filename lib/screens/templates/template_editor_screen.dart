@@ -8,6 +8,7 @@ import '../../core/currency.dart';
 import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
+import '../../widgets/search_picker.dart';
 import '../transactions/transaction_editor_screen.dart'
     show noCategoryId, showCategoryPicker;
 
@@ -59,8 +60,10 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
         _templateId = template.id;
         _titleController.text = template.title;
         _commentController.text = template.comment;
-        _amountController.text =
-            formatMoneyPlain(template.amount.abs(), template.currency);
+        _amountController.text = formatMoneyPlain(
+          template.amount.abs(),
+          template.currency,
+        );
         _transfer = template.transferAccount != null;
         _income = template.amount >= 0 && !_transfer;
         _accountId = template.accountId;
@@ -80,13 +83,16 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final accounts = ref.watch(activeAccountsProvider).value ?? const <Account>[];
-    final categories = ref.watch(categoriesProvider).value ?? const <Category>[];
+    final accounts =
+        ref.watch(activeAccountsProvider).value ?? const <Account>[];
+    final categories =
+        ref.watch(categoriesProvider).value ?? const <Category>[];
     final payees = ref.watch(payeesProvider).value ?? const <Payee>[];
     final methods =
         ref.watch(paymentMethodsProvider).value ?? const <PaymentMethod>[];
     final category = categories.where((c) => c.id == _categoryId).firstOrNull;
-    final currency = accounts
+    final currency =
+        accounts
             .where((account) => account.id == _accountId)
             .firstOrNull
             ?.currency ??
@@ -153,38 +159,41 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            initialValue: _accountId,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Account',
-              prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-            items: accounts
-                .map((account) => DropdownMenuItem(
-                      value: account.id,
-                      child: Text('${account.label} (${account.currency})'),
-                    ))
-                .toList(),
-            onChanged: (value) => setState(() => _accountId = value),
+            tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+            leading: const Icon(Icons.account_balance_wallet_outlined),
+            title: const Text('Account'),
+            subtitle: Text(
+              accounts
+                      .where((account) => account.id == _accountId)
+                      .firstOrNull
+                      ?.label ??
+                  'None',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _pickAccount,
           ),
           if (_transfer) ...[
             const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              initialValue: _targetAccountId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Transfer to',
-                prefixIcon: Icon(Icons.swap_horiz),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              items: accounts
-                  .where((account) => account.id != _accountId)
-                  .map((account) => DropdownMenuItem(
-                        value: account.id,
-                        child: Text('${account.label} (${account.currency})'),
-                      ))
-                  .toList(),
-              onChanged: (value) => setState(() => _targetAccountId = value),
+              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              leading: const Icon(Icons.swap_horiz),
+              title: const Text('Transfer to'),
+              subtitle: Text(
+                accounts
+                        .where((account) => account.id == _targetAccountId)
+                        .firstOrNull
+                        ?.label ??
+                    'None',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _pickTargetAccount,
             ),
           ] else ...[
             const SizedBox(height: 12),
@@ -210,43 +219,47 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
                   allowNone: true,
                 );
                 if (selected == null) return;
-                setState(() =>
-                    _categoryId = selected == noCategoryId ? null : selected);
+                setState(
+                  () =>
+                      _categoryId = selected == noCategoryId ? null : selected,
+                );
               },
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<int?>(
-              initialValue: _payeeId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Payee',
-                prefixIcon: Icon(Icons.person_outline),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('None')),
-                ...payees.map((payee) => DropdownMenuItem(
-                      value: payee.id,
-                      child: Text(payee.name),
-                    )),
-              ],
-              onChanged: (value) => setState(() => _payeeId = value),
+              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Payee'),
+              subtitle: Text(
+                payees
+                        .where((payee) => payee.id == _payeeId)
+                        .firstOrNull
+                        ?.name ??
+                    'None',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _pickPayee,
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<int?>(
-              initialValue: _methodId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Payment method',
-                prefixIcon: Icon(Icons.payment),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('None')),
-                ...methods.map((method) => DropdownMenuItem(
-                      value: method.id,
-                      child: Text(method.displayName),
-                    )),
-              ],
-              onChanged: (value) => setState(() => _methodId = value),
+              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              leading: const Icon(Icons.payment),
+              title: const Text('Payment method'),
+              subtitle: Text(
+                methods
+                        .where((method) => method.id == _methodId)
+                        .firstOrNull
+                        ?.displayName ??
+                    'None',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _pickMethod,
             ),
           ],
           const SizedBox(height: 12),
@@ -273,24 +286,122 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     );
   }
 
+  Future<void> _pickAccount() async {
+    final accounts =
+        ref.read(activeAccountsProvider).value ?? const <Account>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Account',
+      hint: 'Search accounts',
+      selected: _accountId,
+      entries: [
+        for (final account in accounts)
+          PickerEntry(
+            value: account.id,
+            label: account.label,
+            subtitle: account.currency,
+            icon: iconForAccountType(account.type),
+          ),
+      ],
+    );
+    if (value == null) return;
+    setState(() {
+      _accountId = value;
+      if (_targetAccountId == value) {
+        _targetAccountId = accounts
+            .where((account) => account.id != value)
+            .firstOrNull
+            ?.id;
+      }
+    });
+  }
+
+  Future<void> _pickTargetAccount() async {
+    final accounts =
+        ref.read(activeAccountsProvider).value ?? const <Account>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Transfer to',
+      hint: 'Search accounts',
+      selected: _targetAccountId,
+      entries: [
+        for (final account in accounts)
+          if (account.id != _accountId)
+            PickerEntry(
+              value: account.id,
+              label: account.label,
+              subtitle: account.currency,
+              icon: iconForAccountType(account.type),
+            ),
+      ],
+    );
+    if (value != null) setState(() => _targetAccountId = value);
+  }
+
+  Future<void> _pickPayee() async {
+    final payees = ref.read(payeesProvider).value ?? const <Payee>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Payee',
+      hint: 'Search payees',
+      selected: _payeeId ?? -1,
+      allowNone: true,
+      noneValue: -1,
+      entries: [
+        for (final payee in payees)
+          PickerEntry(
+            value: payee.id,
+            label: payee.name,
+            subtitle: payee.iban,
+            icon: Icons.person_outline,
+          ),
+      ],
+    );
+    if (value != null) {
+      setState(() => _payeeId = value == -1 ? null : value);
+    }
+  }
+
+  Future<void> _pickMethod() async {
+    final methods =
+        ref.read(paymentMethodsProvider).value ?? const <PaymentMethod>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Payment method',
+      hint: 'Search payment methods',
+      selected: _methodId ?? -1,
+      allowNone: true,
+      noneValue: -1,
+      entries: [
+        for (final method in methods)
+          PickerEntry(
+            value: method.id,
+            label: method.displayName,
+            icon: iconForPaymentMethod(method.icon),
+          ),
+      ],
+    );
+    if (value != null) {
+      setState(() => _methodId = value == -1 ? null : value);
+    }
+  }
+
   Future<void> _save(String currency) async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a template name.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a template name.')));
       return;
     }
     final amount = parseAmountToMinor(_amountController.text, currency) ?? 0;
     if (amount == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter an amount.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Enter an amount.')));
       return;
     }
     if (_accountId == null) return;
-    final signedAmount =
-        (_transfer || !_income) ? -amount.abs() : amount.abs();
+    final signedAmount = (_transfer || !_income) ? -amount.abs() : amount.abs();
     final repo = ref.read(repositoryProvider);
     try {
       if (_templateId == null) {
@@ -321,9 +432,8 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
       if (mounted) context.pop();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $error')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not save: $error')));
       }
     }
   }

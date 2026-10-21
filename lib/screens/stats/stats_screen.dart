@@ -10,6 +10,7 @@ import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/search_picker.dart';
 
 class StatsScreen extends ConsumerWidget {
   const StatsScreen({super.key});
@@ -189,46 +190,31 @@ class StatsScreen extends ConsumerWidget {
     }
   }
 
-  void _showAccountMenu(
+  Future<void> _showAccountMenu(
     BuildContext context,
     WidgetRef ref,
     List<Account> accounts,
-  ) {
-    showModalBottomSheet<void>(
+  ) async {
+    final value = await showSearchPicker<int>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.public),
-              title: const Text('All accounts'),
-              trailing: ref.read(statsAccountProvider) == null
-                  ? const Icon(Icons.check)
-                  : null,
-              onTap: () {
-                ref.read(statsAccountProvider.notifier).set(null);
-                Navigator.of(context).pop();
-              },
-            ),
-            for (final account in accounts)
-              ListTile(
-                leading: Icon(iconForAccountType(account.type)),
-                title: Text(account.label),
-                subtitle: Text(account.currency),
-                trailing: ref.read(statsAccountProvider) == account.id
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () {
-                  ref.read(statsAccountProvider.notifier).set(account.id);
-                  Navigator.of(context).pop();
-                },
-              ),
-          ],
-        ),
-      ),
+      title: 'Account',
+      hint: 'Search accounts',
+      selected: ref.read(statsAccountProvider) ?? -1,
+      allowNone: true,
+      noneLabel: 'All accounts',
+      noneValue: -1,
+      entries: [
+        for (final account in accounts)
+          PickerEntry(
+            value: account.id,
+            label: account.label,
+            subtitle: account.currency,
+            icon: iconForAccountType(account.type),
+          ),
+      ],
     );
+    if (value == null) return;
+    ref.read(statsAccountProvider.notifier).set(value == -1 ? null : value);
   }
 }
 

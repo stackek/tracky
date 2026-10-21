@@ -14,6 +14,7 @@ import '../../core/dates.dart';
 import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
+import '../../widgets/search_picker.dart';
 
 class TransactionEditorScreen extends ConsumerStatefulWidget {
   const TransactionEditorScreen({
@@ -320,46 +321,34 @@ class _TransactionEditorScreenState
           const SizedBox(height: 12),
           _SectionCard(
             children: [
-              _DropdownTile<int>(
-                icon: Icons.account_balance_wallet_outlined,
-                label: 'Account',
-                value: _accountId,
-                items: accounts
-                    .map(
-                      (account) => DropdownMenuItem(
-                        value: account.id,
-                        child: Text('${account.label} (${account.currency})'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) => setState(() {
-                  _accountId = value;
-                  if (_targetAccountId == value) {
-                    _targetAccountId = accounts
-                        .where((account) => account.id != value)
-                        .firstOrNull
-                        ?.id;
-                  }
-                }),
+              ListTile(
+                leading: Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                title: const Text('Account'),
+                subtitle: Text(
+                  source == null
+                      ? 'None'
+                      : '${source.label} (${source.currency})',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _pickAccount,
               ),
               if (_type == DraftType.transfer)
-                _DropdownTile<int>(
-                  icon: Icons.swap_horiz,
-                  label: 'Transfer to',
-                  value: _targetAccountId,
-                  items: accounts
-                      .where((account) => account.id != _accountId)
-                      .map(
-                        (account) => DropdownMenuItem(
-                          value: account.id,
-                          child: Text('${account.label} (${account.currency})'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) => setState(() {
-                    _targetAccountId = value;
-                    _targetAmountController.clear();
-                  }),
+                ListTile(
+                  leading: Icon(
+                    Icons.swap_horiz,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  title: const Text('Transfer to'),
+                  subtitle: Text(
+                    target == null
+                        ? 'None'
+                        : '${target.label} (${target.currency})',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _pickTargetAccount,
                 ),
               if (_type == DraftType.transfer && !sameCurrency)
                 Padding(
@@ -440,40 +429,51 @@ class _TransactionEditorScreenState
             const SizedBox(height: 12),
             _SectionCard(
               children: [
-                _DropdownTile<int?>(
-                  icon: Icons.person_outline,
-                  label: 'Payee',
-                  value: _payeeId,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('None')),
-                    ...payees.map(
-                      (payee) => DropdownMenuItem(
-                        value: payee.id,
-                        child: Text(payee.name),
-                      ),
-                    ),
-                  ],
-                  onChanged: _selectPayee,
-                  trailingAction: IconButton(
-                    tooltip: 'Add payee',
-                    icon: const Icon(Icons.add),
-                    onPressed: _addPayee,
+                ListTile(
+                  leading: Icon(
+                    Icons.person_outline,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                ),
-                _DropdownTile<int?>(
-                  icon: Icons.payment,
-                  label: 'Payment method',
-                  value: _methodId,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('None')),
-                    ...methods.map(
-                      (method) => DropdownMenuItem(
-                        value: method.id,
-                        child: Text(method.displayName),
+                  title: const Text('Payee'),
+                  subtitle: Text(
+                    _payeeId == null
+                        ? 'None'
+                        : payees
+                                  .where((payee) => payee.id == _payeeId)
+                                  .firstOrNull
+                                  ?.name ??
+                              'None',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Add payee',
+                        icon: const Icon(Icons.add),
+                        onPressed: _addPayee,
                       ),
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _methodId = value),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                  onTap: _pickPayee,
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.payment,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  title: const Text('Payment method'),
+                  subtitle: Text(
+                    _methodId == null
+                        ? 'None'
+                        : methods
+                                  .where((method) => method.id == _methodId)
+                                  .firstOrNull
+                                  ?.displayName ??
+                              'None',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _pickMethod,
                 ),
               ],
             ),
@@ -700,30 +700,47 @@ class _TransactionEditorScreenState
                   ),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<int?>(
-                  initialValue: selectedCategory,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('No category'),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    iconForCategory(
+                      categories
+                          .where((category) => category.id == selectedCategory)
+                          .firstOrNull
+                          ?.icon,
                     ),
-                    ...categories
-                        .where(
-                          (category) =>
-                              category.type == (expense ? 1 : 2) ||
-                              category.type == 0,
-                        )
-                        .map(
-                          (category) => DropdownMenuItem(
-                            value: category.id,
-                            child: Text(category.displayPath),
-                          ),
-                        ),
-                  ],
-                  onChanged: (value) =>
-                      setDialogState(() => selectedCategory = value),
+                  ),
+                  title: const Text('Category'),
+                  subtitle: Text(
+                    categories
+                            .where(
+                              (category) => category.id == selectedCategory,
+                            )
+                            .firstOrNull
+                            ?.displayPath ??
+                        'No category',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final selected = await showCategoryPicker(
+                      context,
+                      categories
+                          .where(
+                            (category) =>
+                                category.type == (expense ? 1 : 2) ||
+                                category.type == 0,
+                          )
+                          .toList(),
+                      initialId: selectedCategory,
+                      allowNone: true,
+                    );
+                    if (selected == null) return;
+                    setDialogState(
+                      () => selectedCategory = selected == noCategoryId
+                          ? null
+                          : selected,
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -762,6 +779,108 @@ class _TransactionEditorScreenState
     );
     disposeAfterDialog([amountController, commentController]);
     return result;
+  }
+
+  Future<void> _pickAccount() async {
+    final accounts =
+        ref.read(activeAccountsProvider).value ?? const <Account>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Account',
+      hint: 'Search accounts',
+      selected: _accountId,
+      entries: [
+        for (final account in accounts)
+          PickerEntry(
+            value: account.id,
+            label: account.label,
+            subtitle: account.currency,
+            icon: iconForAccountType(account.type),
+          ),
+      ],
+    );
+    if (value == null) return;
+    setState(() {
+      _accountId = value;
+      if (_targetAccountId == value) {
+        _targetAccountId = accounts
+            .where((account) => account.id != value)
+            .firstOrNull
+            ?.id;
+      }
+    });
+  }
+
+  Future<void> _pickTargetAccount() async {
+    final accounts =
+        ref.read(activeAccountsProvider).value ?? const <Account>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Transfer to',
+      hint: 'Search accounts',
+      selected: _targetAccountId,
+      entries: [
+        for (final account in accounts)
+          if (account.id != _accountId)
+            PickerEntry(
+              value: account.id,
+              label: account.label,
+              subtitle: account.currency,
+              icon: iconForAccountType(account.type),
+            ),
+      ],
+    );
+    if (value == null) return;
+    setState(() {
+      _targetAccountId = value;
+      _targetAmountController.clear();
+    });
+  }
+
+  Future<void> _pickPayee() async {
+    final payees = ref.read(payeesProvider).value ?? const <Payee>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Payee',
+      hint: 'Search payees',
+      selected: _payeeId ?? -1,
+      allowNone: true,
+      noneValue: -1,
+      entries: [
+        for (final payee in payees)
+          PickerEntry(
+            value: payee.id,
+            label: payee.name,
+            subtitle: payee.iban,
+            icon: Icons.person_outline,
+          ),
+      ],
+    );
+    if (value == null) return;
+    await _selectPayee(value == -1 ? null : value);
+  }
+
+  Future<void> _pickMethod() async {
+    final methods =
+        ref.read(paymentMethodsProvider).value ?? const <PaymentMethod>[];
+    final value = await showSearchPicker<int>(
+      context: context,
+      title: 'Payment method',
+      hint: 'Search payment methods',
+      selected: _methodId ?? -1,
+      allowNone: true,
+      noneValue: -1,
+      entries: [
+        for (final method in methods)
+          PickerEntry(
+            value: method.id,
+            label: method.displayName,
+            icon: iconForPaymentMethod(method.icon),
+          ),
+      ],
+    );
+    if (value == null) return;
+    setState(() => _methodId = value == -1 ? null : value);
   }
 
   Future<void> _selectPayee(int? payeeId) async {
@@ -1139,53 +1258,6 @@ class _SectionCard extends StatelessWidget {
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Column(children: children),
-    );
-  }
-}
-
-class _DropdownTile<T> extends StatelessWidget {
-  const _DropdownTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.items,
-    required this.onChanged,
-    this.trailingAction,
-  });
-
-  final IconData icon;
-  final String label;
-  final T? value;
-  final List<DropdownMenuItem<T>> items;
-  final ValueChanged<T?> onChanged;
-  final Widget? trailingAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-      child: Row(
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: 16),
-          Expanded(
-            child: DropdownButtonFormField<T>(
-              initialValue: value,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: label,
-                filled: false,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-              ),
-              items: items,
-              onChanged: onChanged,
-            ),
-          ),
-          ?trailingAction,
-        ],
-      ),
     );
   }
 }

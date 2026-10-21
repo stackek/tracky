@@ -8,6 +8,7 @@ import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/currency_picker.dart';
+import '../../widgets/search_picker.dart';
 
 class AccountEditorScreen extends ConsumerStatefulWidget {
   const AccountEditorScreen({super.key, this.accountId});
@@ -50,13 +51,17 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
   Future<void> _load() async {
     _currency = ref.read(settingsProvider).homeCurrency;
     if (widget.accountId != null) {
-      final account = await ref.read(repositoryProvider).account(widget.accountId!);
+      final account = await ref
+          .read(repositoryProvider)
+          .account(widget.accountId!);
       if (account != null) {
         _accountId = account.id;
         _labelController.text = account.label;
         _descriptionController.text = account.description;
-        _openingBalanceController.text =
-            formatMoneyPlain(account.openingBalance, account.currency);
+        _openingBalanceController.text = formatMoneyPlain(
+          account.openingBalance,
+          account.currency,
+        );
         _type = account.type;
         _currency = account.currency;
         _color = account.color;
@@ -73,8 +78,10 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final types = ref.watch(accountTypesProvider).value ?? const <AccountType>[];
-    final currencies = ref.watch(currenciesProvider).value ?? const <CurrencyInfo>[];
+    final types =
+        ref.watch(accountTypesProvider).value ?? const <AccountType>[];
+    final currencies =
+        ref.watch(currenciesProvider).value ?? const <CurrencyInfo>[];
     return Scaffold(
       appBar: AppBar(
         title: Text(_accountId == null ? 'New account' : 'Edit account'),
@@ -99,26 +106,51 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            initialValue: _type,
-            decoration: const InputDecoration(
-              labelText: 'Account type',
-              prefixIcon: Icon(Icons.category_outlined),
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-            items: types
-                .map((type) => DropdownMenuItem(
+            tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+            leading: const Icon(Icons.category_outlined),
+            title: const Text('Account type'),
+            subtitle: Text(
+              types
+                      .where((type) => type.id == _type)
+                      .firstOrNull
+                      ?.displayName ??
+                  'None',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final value = await showSearchPicker<int>(
+                context: context,
+                title: 'Account type',
+                hint: 'Search account types',
+                selected: _type,
+                entries: [
+                  for (final type in types)
+                    PickerEntry(
                       value: type.id,
-                      child: Text(type.displayName),
-                    ))
-                .toList(),
-            onChanged: (value) => setState(() => _type = value ?? _type),
+                      label: type.displayName,
+                      subtitle: type.isAsset ? 'Asset' : 'Liability',
+                      icon: type.isAsset
+                          ? Icons.trending_up
+                          : Icons.trending_down,
+                    ),
+                ],
+              );
+              if (value != null) setState(() => _type = value);
+            },
           ),
           const SizedBox(height: 12),
           InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: () async {
-              final result =
-                  await showCurrencyPicker(context, currencies, selected: _currency);
+              final result = await showCurrencyPicker(
+                context,
+                currencies,
+                selected: _currency,
+              );
               if (result != null) setState(() => _currency = result);
             },
             child: InputDecorator(
@@ -247,9 +279,9 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
   Future<void> _save() async {
     final label = _labelController.text.trim();
     if (label.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter an account name.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter an account name.')));
       return;
     }
     final opening =
@@ -313,9 +345,8 @@ class _AccountEditorScreenState extends ConsumerState<AccountEditorScreen> {
       if (mounted) context.pop();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not delete: $error')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not delete: $error')));
       }
     }
   }

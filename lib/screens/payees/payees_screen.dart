@@ -5,6 +5,7 @@ import 'package:my_expenses_open/core/ui_utils.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/search_picker.dart';
 
 class PayeesScreen extends ConsumerStatefulWidget {
   const PayeesScreen({super.key});
@@ -28,8 +29,10 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
       body: payees.when(
         data: (items) {
           final filtered = items
-              .where((payee) =>
-                  payee.name.toLowerCase().contains(_query.toLowerCase()))
+              .where(
+                (payee) =>
+                    payee.name.toLowerCase().contains(_query.toLowerCase()),
+              )
               .toList();
           return Column(
             children: [
@@ -70,20 +73,33 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
                                 ? null
                                 : Text(payee.iban!),
                             onTap: () => _edit(payee),
-                            trailing: PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'edit') {
+                            trailing: IconButton(
+                              tooltip: 'More',
+                              icon: const Icon(Icons.more_vert),
+                              onPressed: () async {
+                                final action = await showActionSheet<String>(
+                                  context,
+                                  title: payee.name,
+                                  actions: const [
+                                    SheetAction(
+                                      value: 'edit',
+                                      label: 'Edit',
+                                      icon: Icons.edit_outlined,
+                                    ),
+                                    SheetAction(
+                                      value: 'delete',
+                                      label: 'Delete',
+                                      icon: Icons.delete_outline,
+                                      destructive: true,
+                                    ),
+                                  ],
+                                );
+                                if (action == 'edit') {
                                   await _edit(payee);
-                                } else if (value == 'delete') {
+                                } else if (action == 'delete') {
                                   await _delete(payee);
                                 }
                               },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(
-                                    value: 'edit', child: Text('Edit')),
-                                PopupMenuItem(
-                                    value: 'delete', child: Text('Delete')),
-                              ],
                             ),
                           );
                         },
@@ -101,8 +117,7 @@ class _PayeesScreenState extends ConsumerState<PayeesScreen> {
 
   Future<void> _edit([Payee? payee]) async {
     final name = TextEditingController(text: payee?.name ?? '');
-    final shortName =
-        TextEditingController(text: payee?.shortName ?? '');
+    final shortName = TextEditingController(text: payee?.shortName ?? '');
     final iban = TextEditingController(text: payee?.iban ?? '');
     final result = await showDialog<bool>(
       context: context,

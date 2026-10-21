@@ -6,6 +6,7 @@ import 'package:my_expenses_open/core/ui_utils.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/search_picker.dart';
 
 class AccountTypesScreen extends ConsumerWidget {
   const AccountTypesScreen({super.key});
@@ -33,12 +34,11 @@ class AccountTypesScreen extends ConsumerWidget {
                   final type = items[index];
                   return ListTile(
                     leading: CircleAvatar(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.surfaceContainerHigh,
+                      backgroundColor: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHigh,
                       child: Icon(
-                        type.isAsset
-                            ? Icons.trending_up
-                            : Icons.trending_down,
+                        type.isAsset ? Icons.trending_up : Icons.trending_down,
                       ),
                     ),
                     title: Text(type.displayName),
@@ -49,18 +49,34 @@ class AccountTypesScreen extends ConsumerWidget {
                       ].join(' • '),
                     ),
                     onTap: () => _editType(context, ref, type),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) async {
-                        if (value == 'edit') {
+                    trailing: IconButton(
+                      tooltip: 'More',
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () async {
+                        final action = await showActionSheet<String>(
+                          context,
+                          title: type.displayName,
+                          actions: const [
+                            SheetAction(
+                              value: 'edit',
+                              label: 'Edit',
+                              icon: Icons.edit_outlined,
+                            ),
+                            SheetAction(
+                              value: 'delete',
+                              label: 'Delete',
+                              icon: Icons.delete_outline,
+                              destructive: true,
+                            ),
+                          ],
+                        );
+                        if (!context.mounted) return;
+                        if (action == 'edit') {
                           await _editType(context, ref, type);
-                        } else if (value == 'delete') {
+                        } else if (action == 'delete') {
                           await _deleteType(context, ref, type);
                         }
                       },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      ],
                     ),
                   );
                 },
@@ -77,9 +93,7 @@ class AccountTypesScreen extends ConsumerWidget {
     WidgetRef ref, [
     AccountType? type,
   ]) async {
-    final name = TextEditingController(
-      text: type?.displayName ?? '',
-    );
+    final name = TextEditingController(text: type?.displayName ?? '');
     final sortKey = TextEditingController(
       text: (type?.sortKey ?? 0).toString(),
     );
@@ -167,9 +181,8 @@ class AccountTypesScreen extends ConsumerWidget {
       ref.invalidate(accountTypesProvider);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save: $error')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not save: $error')));
       }
     }
   }
@@ -223,9 +236,8 @@ class AccountTypesScreen extends ConsumerWidget {
       ref.invalidate(accountTypesProvider);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not delete: $error')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not delete: $error')));
       }
     }
   }

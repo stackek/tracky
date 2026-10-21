@@ -6,9 +6,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/currency.dart';
 import '../../core/dates.dart';
+import '../../core/icons.dart';
 import '../../models/models.dart';
 import '../../providers.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/search_picker.dart';
 
 class BudgetsScreen extends ConsumerWidget {
   const BudgetsScreen({super.key});
@@ -31,8 +33,7 @@ class BudgetsScreen extends ConsumerWidget {
             ? EmptyState(
                 icon: Icons.savings_outlined,
                 title: 'No budgets yet',
-                message:
-                    'Create a monthly budget and allocate amounts to categories.',
+                message: 'Create a monthly budget and allocate amounts to categories.',
                 actionLabel: 'Create budget',
                 onAction: () => _addBudget(context, ref),
               )
@@ -79,23 +80,42 @@ class BudgetsScreen extends ConsumerWidget {
                   decoration: const InputDecoration(labelText: 'Description'),
                 ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<int?>(
-                  initialValue: accountId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Account'),
-                  items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('All accounts'),
-                    ),
-                    ...accounts.map(
-                      (account) => DropdownMenuItem(
-                        value: account.id,
-                        child: Text(account.label),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => accountId = value),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.account_balance_wallet_outlined),
+                  title: const Text('Account'),
+                  subtitle: Text(
+                    accountId == null
+                        ? 'All accounts'
+                        : accounts
+                                  .where((account) => account.id == accountId)
+                                  .firstOrNull
+                                  ?.label ??
+                              'All accounts',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final value = await showSearchPicker<int>(
+                      context: context,
+                      title: 'Account',
+                      hint: 'Search accounts',
+                      selected: accountId ?? -1,
+                      allowNone: true,
+                      noneLabel: 'All accounts',
+                      noneValue: -1,
+                      entries: [
+                        for (final account in accounts)
+                          PickerEntry(
+                            value: account.id,
+                            label: account.label,
+                            subtitle: account.currency,
+                            icon: iconForAccountType(account.type),
+                          ),
+                      ],
+                    );
+                    if (value == null) return;
+                    setState(() => accountId = value == -1 ? null : value);
+                  },
                 ),
               ],
             ),
@@ -118,7 +138,9 @@ class BudgetsScreen extends ConsumerWidget {
     disposeAfterDialog([title, description]);
     if (result != true || savedTitle.isEmpty) return;
     final account = accounts.where((a) => a.id == accountId).firstOrNull;
-    final id = await ref.read(repositoryProvider).insertBudget(
+    final id = await ref
+        .read(repositoryProvider)
+        .insertBudget(
           title: savedTitle,
           description: savedDescription,
           accountId: accountId,
@@ -178,39 +200,47 @@ class _BudgetCard extends ConsumerWidget {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) async {
-                  if (value == 'delete') {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: Text('Delete ${budget.title}?'),
-                        content: const Text(
-                          'The budget and its allocations will be deleted.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          FilledButton(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            child: const Text('Delete'),
-                          ),
-                        ],
+              IconButton(
+                tooltip: 'More',
+                icon: const Icon(Icons.more_vert),
+                onPressed: () async {
+                  final action = await showActionSheet<String>(
+                    context,
+                    title: budget.title,
+                    actions: const [
+                      SheetAction(
+                        value: 'delete',
+                        label: 'Delete',
+                        icon: Icons.delete_outline,
+                        destructive: true,
                       ),
-                    );
-                    if (confirmed == true) {
-                      await ref
-                          .read(repositoryProvider)
-                          .deleteBudget(budget.id);
-                      ref.invalidate(budgetsProvider);
-                    }
+                    ],
+                  );
+                  if (action != 'delete' || !context.mounted) return;
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: Text('Delete ${budget.title}?'),
+                      content: const Text(
+                        'The budget and its allocations will be deleted.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await ref.read(repositoryProvider).deleteBudget(budget.id);
+                    ref.invalidate(budgetsProvider);
                   }
                 },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'delete', child: Text('Delete')),
-                ],
               ),
             ],
           ),
