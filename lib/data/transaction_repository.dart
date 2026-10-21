@@ -751,8 +751,6 @@ extension TransactionRepository on Repository {
     bool clearCategory = false,
     int? payeeId,
     bool clearPayee = false,
-    int? methodId,
-    bool clearMethod = false,
     DateTime? date,
     String? crStatus,
     String? comment,
@@ -787,8 +785,6 @@ extension TransactionRepository on Repository {
         }
         if (payeeId != null) values['payee_id'] = payeeId;
         if (clearPayee) values['payee_id'] = null;
-        if (methodId != null) values['method_id'] = methodId;
-        if (clearMethod) values['method_id'] = null;
         if (date != null) {
           final valueDate = DateTime(
             date.year,
@@ -821,8 +817,6 @@ extension TransactionRepository on Repository {
           if (accountId != null) childValues['account_id'] = accountId;
           if (payeeId != null) childValues['payee_id'] = payeeId;
           if (clearPayee) childValues['payee_id'] = null;
-          if (methodId != null) childValues['method_id'] = methodId;
-          if (clearMethod) childValues['method_id'] = null;
           if (date != null) {
             childValues['date'] = values['date'];
             childValues['value_date'] = values['value_date'];
@@ -852,8 +846,6 @@ extension TransactionRepository on Repository {
               final peerValues = <String, Object?>{};
               if (payeeId != null) peerValues['payee_id'] = payeeId;
               if (clearPayee) peerValues['payee_id'] = null;
-              if (methodId != null) peerValues['method_id'] = methodId;
-              if (clearMethod) peerValues['method_id'] = null;
               if (date != null) {
                 peerValues['date'] = values['date'];
                 peerValues['value_date'] = values['value_date'];

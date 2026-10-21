@@ -326,8 +326,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         (await ref.read(repositoryProvider).activeAccounts());
     if (!context.mounted) return;
     final payees = ref.read(payeesProvider).value ?? const <Payee>[];
-    final methods =
-        ref.read(paymentMethodsProvider).value ?? const <PaymentMethod>[];
     final categories =
         ref.read(categoriesProvider).value ?? const <Category>[];
     final settings = ref.read(settingsProvider);
@@ -337,8 +335,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     var clearCategory = false;
     int? payeeId;
     var clearPayee = false;
-    int? methodId;
-    var clearMethod = false;
     DateTime? date;
     String? status;
     var clearComment = false;
@@ -378,16 +374,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     .where((payee) => payee.id == payeeId)
                     .firstOrNull
                     ?.name ??
-                'Leave unchanged';
-          }
-
-          String labelForMethod() {
-            if (clearMethod) return 'Clear payment method';
-            if (methodId == null) return 'Leave unchanged';
-            return methods
-                    .where((method) => method.id == methodId)
-                    .firstOrNull
-                    ?.displayName ??
                 'Leave unchanged';
           }
 
@@ -532,51 +518,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.payment),
-                    title: const Text('Payment method'),
-                    subtitle: Text(labelForMethod()),
-                    onTap: () async {
-                      final value = await showSearchPicker<int>(
-                        context: context,
-                        title: 'Payment method',
-                        hint: 'Search payment methods',
-                        selected: clearMethod ? -2 : (methodId ?? -1),
-                        entries: [
-                          const PickerEntry(
-                            value: -1,
-                            label: 'Leave unchanged',
-                            icon: Icons.remove_circle_outline,
-                          ),
-                          const PickerEntry(
-                            value: -2,
-                            label: 'Clear payment method',
-                            icon: Icons.block,
-                          ),
-                          for (final method in methods)
-                            PickerEntry(
-                              value: method.id,
-                              label: method.displayName,
-                              icon: iconForPaymentMethod(method.icon),
-                            ),
-                        ],
-                      );
-                      if (value == null) return;
-                      setSheetState(() {
-                        if (value == -1) {
-                          methodId = null;
-                          clearMethod = false;
-                        } else if (value == -2) {
-                          methodId = null;
-                          clearMethod = true;
-                        } else {
-                          methodId = value;
-                          clearMethod = false;
-                        }
-                      });
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.event),
                     title: const Text('Date'),
                     subtitle: Text(
@@ -693,8 +634,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                                   clearCategory: clearCategory,
                                   payeeId: payeeId,
                                   clearPayee: clearPayee,
-                                  methodId: methodId,
-                                  clearMethod: clearMethod,
                                   date: date,
                                   crStatus: status,
                                   comment: noteController.text.trim().isEmpty

@@ -218,10 +218,6 @@ final payeesProvider = FutureProvider<List<Payee>>(
   (ref) => ref.watch(repositoryProvider).payees(),
 );
 
-final paymentMethodsProvider = FutureProvider<List<PaymentMethod>>(
-  (ref) => ref.watch(repositoryProvider).paymentMethods(),
-);
-
 final tagsProvider = FutureProvider<List<Tag>>(
   (ref) => ref.watch(repositoryProvider).tags(),
 );
@@ -361,6 +357,5 @@ void invalidateLookupData(WidgetRef ref) {
   ref.invalidate(categoriesProvider);
   ref.invalidate(categoryTreeProvider);
   ref.invalidate(payeesProvider);
-  ref.invalidate(paymentMethodsProvider);
   ref.invalidate(tagsProvider);
 }

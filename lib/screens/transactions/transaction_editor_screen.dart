@@ -51,7 +51,6 @@ class _TransactionEditorScreenState
   int? _targetAccountId;
   int? _categoryId;
   int? _payeeId;
-  int? _methodId;
   DebtMode _debtMode = DebtMode.none;
   int? _debtPayeeId;
   int? _resolveDebtId;
@@ -103,7 +102,6 @@ class _TransactionEditorScreenState
         _accountId = existing.accountId;
         _categoryId = existing.catId;
         _payeeId = existing.payeeId;
-        _methodId = existing.methodId;
         _date = existing.date;
         _valueDate = existing.valueDate;
         _crStatus = existing.crStatus;
@@ -295,8 +293,6 @@ class _TransactionEditorScreenState
     final categories =
         ref.watch(categoriesProvider).value ?? const <Category>[];
     final payees = ref.watch(payeesProvider).value ?? const <Payee>[];
-    final methods =
-        ref.watch(paymentMethodsProvider).value ?? const <PaymentMethod>[];
     final tags = ref.watch(tagsProvider).value ?? const <Tag>[];
     final source = accounts.where((a) => a.id == _accountId).firstOrNull;
     final target = accounts.where((a) => a.id == _targetAccountId).firstOrNull;
@@ -404,24 +400,6 @@ class _TransactionEditorScreenState
                     ],
                   ),
                   onTap: _pickPayee,
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.payment,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  title: const Text('Payment method'),
-                  subtitle: Text(
-                    _methodId == null
-                        ? 'None'
-                        : methods
-                                  .where((method) => method.id == _methodId)
-                                  .firstOrNull
-                                  ?.displayName ??
-                              'None',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _pickMethod,
                 ),
               ],
             ),
@@ -1420,29 +1398,6 @@ class _TransactionEditorScreenState
     await _selectPayee(value == -1 ? null : value);
   }
 
-  Future<void> _pickMethod() async {
-    final methods =
-        ref.read(paymentMethodsProvider).value ?? const <PaymentMethod>[];
-    final value = await showSearchPicker<int>(
-      context: context,
-      title: 'Payment method',
-      hint: 'Search payment methods',
-      selected: _methodId ?? -1,
-      allowNone: true,
-      noneValue: -1,
-      entries: [
-        for (final method in methods)
-          PickerEntry(
-            value: method.id,
-            label: method.displayName,
-            icon: iconForPaymentMethod(method.icon),
-          ),
-      ],
-    );
-    if (value == null) return;
-    setState(() => _methodId = value == -1 ? null : value);
-  }
-
   Future<void> _selectPayee(int? payeeId) async {
     setState(() => _payeeId = payeeId);
     if (payeeId == null || _splitMode || _type == DraftType.transfer) return;
@@ -1915,7 +1870,6 @@ class _TransactionEditorScreenState
         valueDate: _valueDate,
         categoryId: _categoryId,
         payeeId: _payeeId,
-        methodId: _methodId,
         comment: _commentController.text.trim(),
         number: _numberController.text.trim(),
         crStatus: _crStatus,

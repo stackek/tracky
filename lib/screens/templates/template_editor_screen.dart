@@ -35,7 +35,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
   int? _targetAccountId;
   int? _categoryId;
   int? _payeeId;
-  int? _methodId;
 
   @override
   void initState() {
@@ -70,7 +69,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
         _targetAccountId = template.transferAccount;
         _categoryId = template.catId;
         _payeeId = template.payeeId;
-        _methodId = template.methodId;
       }
     } else {
       _accountId = accounts.firstOrNull?.id;
@@ -88,8 +86,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     final categories =
         ref.watch(categoriesProvider).value ?? const <Category>[];
     final payees = ref.watch(payeesProvider).value ?? const <Payee>[];
-    final methods =
-        ref.watch(paymentMethodsProvider).value ?? const <PaymentMethod>[];
     final category = categories.where((c) => c.id == _categoryId).firstOrNull;
     final currency =
         accounts
@@ -244,23 +240,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
               onTap: _pickPayee,
             ),
             const SizedBox(height: 12),
-            ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-              leading: const Icon(Icons.payment),
-              title: const Text('Payment method'),
-              subtitle: Text(
-                methods
-                        .where((method) => method.id == _methodId)
-                        .firstOrNull
-                        ?.displayName ??
-                    'None',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _pickMethod,
-            ),
           ],
           const SizedBox(height: 12),
           TextField(
@@ -375,30 +354,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
     }
   }
 
-  Future<void> _pickMethod() async {
-    final methods =
-        ref.read(paymentMethodsProvider).value ?? const <PaymentMethod>[];
-    final value = await showSearchPicker<int>(
-      context: context,
-      title: 'Payment method',
-      hint: 'Search payment methods',
-      selected: _methodId ?? -1,
-      allowNone: true,
-      noneValue: -1,
-      entries: [
-        for (final method in methods)
-          PickerEntry(
-            value: method.id,
-            label: method.displayName,
-            icon: iconForPaymentMethod(method.icon),
-          ),
-      ],
-    );
-    if (value != null) {
-      setState(() => _methodId = value == -1 ? null : value);
-    }
-  }
-
   Future<void> _save(String currency, {bool addTransaction = false}) async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
@@ -426,7 +381,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           categoryId: _transfer ? null : _categoryId,
           accountId: _accountId!,
           payeeId: _payeeId,
-          methodId: _methodId,
           transferAccount: _transfer ? _targetAccountId : null,
         );
       } else {
@@ -439,7 +393,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           categoryId: _transfer ? null : _categoryId,
           accountId: _accountId!,
           payeeId: _payeeId,
-          methodId: _methodId,
           transferAccount: _transfer ? _targetAccountId : null,
         );
       }
