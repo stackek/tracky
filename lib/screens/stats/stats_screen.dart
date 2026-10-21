@@ -20,7 +20,6 @@ class StatsScreen extends ConsumerWidget {
     final month = ref.watch(statsMonthProvider);
     final range = ref.watch(statsRangeProvider);
     final accountId = ref.watch(statsAccountProvider);
-    final statsType = ref.watch(statsTypeProvider);
     final accounts =
         ref.watch(activeAccountsProvider).value ?? const <Account>[];
     final stats = ref.watch(statsProvider);
@@ -86,37 +85,48 @@ class StatsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _SummaryCards(
-                  data: data,
-                  theme: theme,
-                  type: statsType,
-                  onTypeChanged: (value) =>
-                      ref.read(statsTypeProvider.notifier).set(value),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final statsType = ref.watch(statsTypeProvider);
+                    final categories = data.byCategoryFor(statsType);
+                    return Column(
+                      children: [
+                        _SummaryCards(
+                          data: data,
+                          theme: theme,
+                          type: statsType,
+                          onTypeChanged: (value) => ref
+                              .read(statsTypeProvider.notifier)
+                              .set(value),
+                        ),
+                        const SizedBox(height: 22),
+                        if (categories.isEmpty)
+                          EmptyState(
+                            icon: Icons.pie_chart_outline,
+                            title: statsType == StatsType.income
+                                ? 'No income in this period'
+                                : 'No expenses in this period',
+                            message: statsType == StatsType.income
+                                ? 'Add income to see the breakdown by category.'
+                                : 'Add an expense to see the breakdown by category.',
+                          )
+                        else
+                          _CategoryBreakdown(
+                            data: data,
+                            type: statsType,
+                            onOpenCategory: (category) => _openCategory(
+                              context,
+                              ref,
+                              category,
+                              month,
+                              range,
+                              accountId,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 22),
-                if (data.byCategory.isEmpty)
-                  EmptyState(
-                    icon: Icons.pie_chart_outline,
-                    title: statsType == StatsType.income
-                        ? 'No income in this period'
-                        : 'No expenses in this period',
-                    message: statsType == StatsType.income
-                        ? 'Add income to see the breakdown by category.'
-                        : 'Add an expense to see the breakdown by category.',
-                  )
-                else
-                  _CategoryBreakdown(
-                    data: data,
-                    type: statsType,
-                    onOpenCategory: (category) => _openCategory(
-                      context,
-                      ref,
-                      category,
-                      month,
-                      range,
-                      accountId,
-                    ),
-                  ),
                 const SizedBox(height: 12),
                 Center(
                   child: Text(
@@ -479,13 +489,13 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final total = widget.data.byCategory.fold<int>(
+    final categories = widget.data.byCategoryFor(widget.type);
+    final total = categories.fold<int>(
       0,
       (sum, category) => sum + category.amount,
     );
-    final selected =
-        _selectedIndex >= 0 && _selectedIndex < widget.data.byCategory.length
-        ? widget.data.byCategory[_selectedIndex]
+    final selected = _selectedIndex >= 0 && _selectedIndex < categories.length
+        ? categories[_selectedIndex]
         : null;
 
     return GestureDetector(
@@ -547,17 +557,17 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
                       },
                     ),
                     sections: [
-                      for (var i = 0; i < widget.data.byCategory.length; i++)
+                      for (var i = 0; i < categories.length; i++)
                         PieChartSectionData(
-                          value: widget.data.byCategory[i].amount.toDouble(),
-                          color: colorFromDb(widget.data.byCategory[i].color),
+                          value: categories[i].amount.toDouble(),
+                          color: colorFromDb(categories[i].color),
                           radius: _selectedIndex == i ? 64 : 50,
                           showTitle: _selectedIndex == i,
                           title: _selectedIndex == i
                               ? (_percent
-                                    ? '${_percentage(widget.data.byCategory[i].amount, total)}%'
+                                    ? '${_percentage(categories[i].amount, total)}%'
                                     : formatMoney(
-                                        widget.data.byCategory[i].amount,
+                                        categories[i].amount,
                                         widget.data.currency,
                                       ))
                               : '',
@@ -616,9 +626,9 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
             ),
           ),
           const SizedBox(height: 10),
-          for (var i = 0; i < widget.data.byCategory.length; i++)
+          for (var i = 0; i < categories.length; i++)
             _CategoryRow(
-              category: widget.data.byCategory[i],
+              category: categories[i],
               currency: widget.data.currency,
               percent: _percent,
               total: total,
@@ -626,7 +636,7 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
               onTap: () =>
                   setState(() => _selectedIndex = _selectedIndex == i ? -1 : i),
               onDoubleTap: () =>
-                  widget.onOpenCategory(widget.data.byCategory[i]),
+                  widget.onOpenCategory(categories[i]),
             ),
         ],
       ),

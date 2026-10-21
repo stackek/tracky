@@ -824,15 +824,20 @@ class StatsData {
     required this.income,
     required this.expense,
     required this.monthly,
-    required this.byCategory,
+    required this.byCategoryExpense,
+    required this.byCategoryIncome,
     required this.currency,
   });
 
   final int income;
   final int expense;
   final List<MonthlyTotal> monthly;
-  final List<CategoryTotal> byCategory;
+  final List<CategoryTotal> byCategoryExpense;
+  final List<CategoryTotal> byCategoryIncome;
   final String currency;
+
+  List<CategoryTotal> byCategoryFor(StatsType type) =>
+      type == StatsType.income ? byCategoryIncome : byCategoryExpense;
 
   int get net => income + expense;
 }

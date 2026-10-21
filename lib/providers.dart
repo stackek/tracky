@@ -287,7 +287,6 @@ final statsProvider = FutureProvider<StatsData>((ref) {
   final month = ref.watch(statsMonthProvider);
   final accountId = ref.watch(statsAccountProvider);
   final range = ref.watch(statsRangeProvider);
-  final type = ref.watch(statsTypeProvider);
   final settings = ref.watch(settingsProvider);
   return ref
       .watch(repositoryProvider)
@@ -296,7 +295,6 @@ final statsProvider = FutureProvider<StatsData>((ref) {
         month: month,
         rangeFrom: range?.start,
         rangeTo: range?.end,
-        type: type,
         homeCurrency: settings.homeCurrency,
       );
 });
