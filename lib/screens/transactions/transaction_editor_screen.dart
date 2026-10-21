@@ -38,7 +38,6 @@ class _TransactionEditorScreenState
   final _amountController = TextEditingController();
   final _targetAmountController = TextEditingController();
   final _commentController = TextEditingController();
-  final _numberController = TextEditingController();
   final _debtRateController = TextEditingController();
   final _debtAmountController = TextEditingController();
 
@@ -59,7 +58,9 @@ class _TransactionEditorScreenState
   String? _debtCurrency;
   DateTime _date = DateTime.now();
   DateTime _valueDate = DateTime.now();
-  String _crStatus = 'UNRECONCILED';
+  String _crStatus = 'RECONCILED';
+  String _number = '';
+  bool _dirty = false;
   final List<SplitDraft> _parts = [];
   final Set<int> _tagIds = {};
   final List<Attachment> _attachments = [];
@@ -77,7 +78,6 @@ class _TransactionEditorScreenState
     _amountController.dispose();
     _targetAmountController.dispose();
     _commentController.dispose();
-    _numberController.dispose();
     _debtRateController.dispose();
     _debtAmountController.dispose();
     super.dispose();
@@ -98,13 +98,13 @@ class _TransactionEditorScreenState
         _splitMode = existing.isSplit;
         var displayAmount = existing.amount.abs();
         _commentController.text = existing.comment;
-        _numberController.text = existing.number ?? '';
+        _number = existing.number ?? '';
         _accountId = existing.accountId;
         _categoryId = existing.catId;
         _payeeId = existing.payeeId;
         _date = existing.date;
         _valueDate = existing.valueDate;
-        _crStatus = existing.crStatus;
+        _crStatus = existing.isVoid ? 'VOID' : 'RECONCILED';
         _tagIds.addAll(existing.tagIds);
         _attachments.addAll(await repo.attachmentsForTransaction(existing.id));
         if (!existing.isSplit) {
@@ -249,6 +249,7 @@ class _TransactionEditorScreenState
         );
       }
     }
+    _dirty = false;
     if (mounted) {
       setState(() => _loading = false);
       if (widget.transactionId == null && _type != DraftType.transfer) {
@@ -266,6 +267,76 @@ class _TransactionEditorScreenState
     final total = _parts.fold<int>(0, (sum, part) => sum + part.amount);
     final currency = _accountCurrency;
     _amountController.text = formatMoneyPlain(total.abs(), currency);
+  }
+
+  void _enableSplit() {
+    setState(() {
+      _dirty = true;
+      _splitMode = true;
+      if (_parts.isEmpty) {
+        final parsed = parseAmountToMinor(_amountController.text, _currency);
+        _parts.add(
+          SplitDraft(
+            categoryId: _categoryId,
+            amount: _type == DraftType.income
+                ? (parsed ?? 0)
+                : -(parsed ?? 0),
+          ),
+        );
+      }
+      _updateSplitTotal();
+    });
+  }
+
+  Future<void> _disableSplit() async {
+    if (_parts.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Disable split?'),
+          content: const Text('All split parts will be discarded.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Disable'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() {
+      _dirty = true;
+      _splitMode = false;
+      _parts.clear();
+    });
+  }
+
+  void _shiftDate(int days) {
+    setState(() {
+      _dirty = true;
+      _date = _date.add(Duration(days: days));
+      _valueDate = _date;
+    });
+  }
+
+  void _setToday() {
+    final now = DateTime.now();
+    setState(() {
+      _dirty = true;
+      _date = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        _date.hour,
+        _date.minute,
+      );
+      _valueDate = _date;
+    });
   }
 
   String get _accountCurrency {
@@ -300,9 +371,14 @@ class _TransactionEditorScreenState
         source != null && target != null && source.currency == target.currency;
     final category = categories.where((c) => c.id == _categoryId).firstOrNull;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_editId == null ? 'New transaction' : 'Edit transaction'),
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_editId == null ? 'New transaction' : 'Edit transaction'),
         actions: [
           if (_editId != null)
             IconButton(
@@ -337,6 +413,7 @@ class _TransactionEditorScreenState
               selected: {_type},
               onSelectionChanged: (selection) {
                 setState(() {
+                  _dirty = true;
                   _type = selection.first;
                   if (_type == DraftType.transfer) {
                     _splitMode = false;
@@ -347,28 +424,6 @@ class _TransactionEditorScreenState
                   }
                 });
               },
-            ),
-          if (_splitMode)
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.call_split),
-                  const SizedBox(width: 10),
-                  const Expanded(child: Text('Split transaction')),
-                  TextButton(
-                    onPressed: () => setState(() {
-                      _splitMode = false;
-                      _parts.clear();
-                    }),
-                    child: const Text('Disable'),
-                  ),
-                ],
-              ),
             ),
           if (_type != DraftType.transfer) ...[
             _SectionCard(
@@ -405,6 +460,32 @@ class _TransactionEditorScreenState
             ),
             const SizedBox(height: 16),
           ],
+          if (!_splitMode && _type != DraftType.transfer) ...[
+            _SectionCard(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    iconForCategory(category?.icon),
+                    color: category == null
+                        ? theme.colorScheme.onSurfaceVariant
+                        : colorFromDb(category.color),
+                  ),
+                  title: const Text('Category'),
+                  subtitle: Text(category?.displayPath ?? 'No category'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _pickCategory,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.call_split),
+                  title: const Text('Split into categories'),
+                  subtitle: const Text('Divide this transaction into parts'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _enableSplit,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           _AmountCard(
             controller: _amountController,
             currency: _splitMode ? _currency : _currency,
@@ -415,7 +496,10 @@ class _TransactionEditorScreenState
                 : 'Amount',
             readOnly: _splitMode,
             negative: _type == DraftType.expense,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) {
+              _dirty = true;
+              setState(() {});
+            },
           ),
           const SizedBox(height: 16),
           _SectionCard(
@@ -424,15 +508,40 @@ class _TransactionEditorScreenState
                 leading: const Icon(Icons.event),
                 title: const Text('Date'),
                 subtitle: Text(formatDateTime(_date)),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Previous day',
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: () => _shiftDate(-1),
+                    ),
+                    IconButton(
+                      tooltip: 'Today',
+                      icon: const Icon(Icons.today),
+                      onPressed: _setToday,
+                    ),
+                    IconButton(
+                      tooltip: 'Next day',
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: () => _shiftDate(1),
+                    ),
+                  ],
+                ),
                 onTap: _pickDate,
               ),
-              ListTile(
-                leading: const Icon(Icons.check_circle_outline),
-                title: const Text('Status'),
-                subtitle: Text(_crStatusLabel),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _pickStatus,
+              SwitchListTile(
+                secondary: const Icon(Icons.block),
+                title: const Text('Void'),
+                subtitle: const Text(
+                  'Void transactions stay in the list but are ignored in '
+                  'balances and statistics',
+                ),
+                value: _crStatus == 'VOID',
+                onChanged: (value) => setState(() {
+                  _dirty = true;
+                  _crStatus = value ? 'VOID' : 'RECONCILED';
+                }),
               ),
             ],
           ),
@@ -483,6 +592,7 @@ class _TransactionEditorScreenState
                       labelText: 'Amount received (${target?.currency ?? ''})',
                       helperText: 'Leave empty to use the same number',
                     ),
+                    onChanged: (_) => _dirty = true,
                   ),
                 ),
             ],
@@ -542,6 +652,7 @@ class _TransactionEditorScreenState
                       final debt = await _pickDebt();
                       if (debt == null) return;
                       setState(() {
+                        _dirty = true;
                         _resolveDebtId = debt.id;
                         _resolvedDebt = debt;
                       });
@@ -625,7 +736,26 @@ class _TransactionEditorScreenState
             ),
             const SizedBox(height: 12),
           ],
-          if (_splitMode)
+          if (_splitMode) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.call_split),
+                  const SizedBox(width: 10),
+                  const Expanded(child: Text('Split transaction')),
+                  TextButton(
+                    onPressed: _disableSplit,
+                    child: const Text('Disable'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             _SplitSection(
               parts: _parts,
               categories: categories,
@@ -633,53 +763,12 @@ class _TransactionEditorScreenState
               onAdd: _addSplitPart,
               onEdit: _editSplitPart,
               onDelete: (index) => setState(() {
+                _dirty = true;
                 _parts.removeAt(index);
                 _updateSplitTotal();
               }),
-            )
-          else if (_type != DraftType.transfer)
-            _SectionCard(
-              children: [
-                ListTile(
-                  leading: Icon(
-                    iconForCategory(category?.icon),
-                    color: category == null
-                        ? theme.colorScheme.onSurfaceVariant
-                        : colorFromDb(category.color),
-                  ),
-                  title: const Text('Category'),
-                  subtitle: Text(category?.displayPath ?? 'No category'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _pickCategory,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.call_split),
-                  title: const Text('Split into categories'),
-                  subtitle: const Text('Divide this transaction into parts'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    setState(() {
-                      _splitMode = true;
-                      if (_parts.isEmpty) {
-                        final parsed = parseAmountToMinor(
-                          _amountController.text,
-                          _currency,
-                        );
-                        _parts.add(
-                          SplitDraft(
-                            categoryId: _categoryId,
-                            amount: _type == DraftType.income
-                                ? (parsed ?? 0)
-                                : -(parsed ?? 0),
-                          ),
-                        );
-                      }
-                      _updateSplitTotal();
-                    });
-                  },
-                ),
-              ],
             ),
+          ],
           const SizedBox(height: 12),
           _SectionCard(
             children: [
@@ -707,16 +796,7 @@ class _TransactionEditorScreenState
                     labelText: 'Note',
                     prefixIcon: Icon(Icons.notes),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                child: TextField(
-                  controller: _numberController,
-                  decoration: const InputDecoration(
-                    labelText: 'Reference number',
-                    prefixIcon: Icon(Icons.tag),
-                  ),
+                  onChanged: (_) => _dirty = true,
                 ),
               ),
             ],
@@ -728,9 +808,14 @@ class _TransactionEditorScreenState
             ),
             newFiles: _newAttachments,
             onAdd: _addAttachment,
-            onRemoveExisting: (id) =>
-                setState(() => _removedAttachmentIds.add(id)),
-            onRemoveNew: (file) => setState(() => _newAttachments.remove(file)),
+            onRemoveExisting: (id) => setState(() {
+              _dirty = true;
+              _removedAttachmentIds.add(id);
+            }),
+            onRemoveNew: (file) => setState(() {
+              _dirty = true;
+              _newAttachments.remove(file);
+            }),
           ),
         ],
       ),
@@ -749,19 +834,31 @@ class _TransactionEditorScreenState
           ),
         ),
       ),
+      ),
     );
   }
 
-  String get _crStatusLabel {
-    switch (_crStatus) {
-      case 'CLEARED':
-        return 'Cleared';
-      case 'RECONCILED':
-        return 'Reconciled';
-      case 'VOID':
-        return 'Void';
-      default:
-        return 'Unreconciled';
+  Future<void> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your changes have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      _dirty = false;
+      context.pop();
     }
   }
 
@@ -778,6 +875,7 @@ class _TransactionEditorScreenState
       initialTime: TimeOfDay.fromDateTime(_date),
     );
     setState(() {
+      _dirty = true;
       _date = DateTime(
         date.year,
         date.month,
@@ -787,32 +885,6 @@ class _TransactionEditorScreenState
       );
       _valueDate = _date;
     });
-  }
-
-  Future<void> _pickStatus() async {
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final status in const [
-              'UNRECONCILED',
-              'CLEARED',
-              'RECONCILED',
-              'VOID',
-            ])
-              ListTile(
-                title: Text(status[0] + status.substring(1).toLowerCase()),
-                trailing: _crStatus == status ? const Icon(Icons.check) : null,
-                onTap: () => Navigator.of(context).pop(status),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (value != null) setState(() => _crStatus = value);
   }
 
   Future<void> _pickCategory() async {
@@ -833,13 +905,17 @@ class _TransactionEditorScreenState
       allowNone: true,
     );
     if (selected == null) return;
-    setState(() => _categoryId = selected == noCategoryId ? null : selected);
+    setState(() {
+      _dirty = true;
+      _categoryId = selected == noCategoryId ? null : selected;
+    });
   }
 
   Future<void> _addSplitPart() async {
     final result = await _editPartDialog();
     if (result == null) return;
     setState(() {
+      _dirty = true;
       _parts.add(result);
       _updateSplitTotal();
     });
@@ -849,6 +925,7 @@ class _TransactionEditorScreenState
     final result = await _editPartDialog(initial: _parts[index]);
     if (result == null) return;
     setState(() {
+      _dirty = true;
       _parts[index] = result;
       _updateSplitTotal();
     });
@@ -1033,6 +1110,45 @@ class _TransactionEditorScreenState
                       }
                     }),
                   ),
+                  if (initial == null) ...[
+                    Builder(
+                      builder: (context) {
+                        final total =
+                            parseAmountToMinor(
+                              _amountController.text,
+                              _currency,
+                            ) ??
+                            0;
+                        final used = _parts.fold<int>(
+                          0,
+                          (sum, part) => sum + part.amount.abs(),
+                        );
+                        final remaining = (total - used).clamp(0, total);
+                        if (remaining == 0) return const SizedBox.shrink();
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              amountController.text = formatMoneyPlain(
+                                remaining,
+                                _currency,
+                              );
+                              if (needsConversion &&
+                                  debtMode != DebtMode.none) {
+                                calculateAmount();
+                              }
+                              setDialogState(() {});
+                            },
+                            icon: const Icon(Icons.calculate_outlined),
+                            label: Text(
+                              'Use remaining '
+                              '${formatMoney(remaining, _currency)}',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   TextField(
                     controller: amountController,
@@ -1339,6 +1455,7 @@ class _TransactionEditorScreenState
     );
     if (value == null) return;
     setState(() {
+      _dirty = true;
       _accountId = value;
       if (_targetAccountId == value) {
         _targetAccountId = accounts
@@ -1370,6 +1487,7 @@ class _TransactionEditorScreenState
     );
     if (value == null) return;
     setState(() {
+      _dirty = true;
       _targetAccountId = value;
       _targetAmountController.clear();
     });
@@ -1399,7 +1517,10 @@ class _TransactionEditorScreenState
   }
 
   Future<void> _selectPayee(int? payeeId) async {
-    setState(() => _payeeId = payeeId);
+    setState(() {
+      _dirty = true;
+      _payeeId = payeeId;
+    });
     if (payeeId == null || _splitMode || _type == DraftType.transfer) return;
     final repo = ref.read(repositoryProvider);
     final previous = await repo.lastTransactionForPayee(payeeId);
@@ -1468,12 +1589,14 @@ class _TransactionEditorScreenState
       final debt = await _pickDebt();
       if (debt == null) return;
       setState(() {
+        _dirty = true;
         _debtMode = DebtMode.resolve;
         _resolveDebtId = debt.id;
         _resolvedDebt = debt;
       });
     } else {
       setState(() {
+        _dirty = true;
         _debtMode = mode;
         if (mode == DebtMode.create) {
           _debtPayeeId ??= _payeeId;
@@ -1507,7 +1630,10 @@ class _TransactionEditorScreenState
       ],
     );
     if (value == null) return;
-    setState(() => _debtPayeeId = value == -1 ? null : value);
+    setState(() {
+      _dirty = true;
+      _debtPayeeId = value == -1 ? null : value;
+    });
   }
 
   Future<Debt?> _pickDebt() async {
@@ -1580,6 +1706,7 @@ class _TransactionEditorScreenState
     _debtAmount = _type == DraftType.income ? converted : -converted;
     _debtCurrency = _homeCurrency;
     _debtAmountController.text = formatMoneyPlain(converted, _homeCurrency);
+    _dirty = true;
     if (mounted) setState(() {});
   }
 
@@ -1593,7 +1720,7 @@ class _TransactionEditorScreenState
     final converted = homeAmount.abs();
     _debtAmount = _type == DraftType.income ? converted : -converted;
     _debtCurrency = _homeCurrency;
-    setState(() {});
+    setState(() => _dirty = true);
   }
 
   Future<void> _addPayee() async {
@@ -1717,6 +1844,7 @@ class _TransactionEditorScreenState
                 FilledButton(
                   onPressed: () {
                     setState(() {
+                      _dirty = true;
                       _tagIds
                         ..clear()
                         ..addAll(selected);
@@ -1760,14 +1888,18 @@ class _TransactionEditorScreenState
     if (source == ImageSource.gallery) {
       final files = await picker.pickMultiImage(imageQuality: 90);
       if (files.isNotEmpty) {
-        setState(
-          () => _newAttachments.addAll(files.map((file) => File(file.path))),
-        );
+        setState(() {
+          _dirty = true;
+          _newAttachments.addAll(files.map((file) => File(file.path)));
+        });
       }
     } else {
       final file = await picker.pickImage(source: source, imageQuality: 90);
       if (file != null) {
-        setState(() => _newAttachments.add(File(file.path)));
+        setState(() {
+          _dirty = true;
+          _newAttachments.add(File(file.path));
+        });
       }
     }
   }
@@ -1871,7 +2003,7 @@ class _TransactionEditorScreenState
         categoryId: _categoryId,
         payeeId: _payeeId,
         comment: _commentController.text.trim(),
-        number: _numberController.text.trim(),
+        number: _number,
         crStatus: _crStatus,
         parts: _splitMode ? _parts : [],
         tagIds: _tagIds.toList(),
@@ -1892,6 +2024,7 @@ class _TransactionEditorScreenState
         await repo.removeAttachment(attachmentId);
       }
       if (!mounted) return;
+      _dirty = false;
       invalidateTransactionData(ref);
       context.pop();
     } catch (error) {
@@ -1922,6 +2055,7 @@ class _TransactionEditorScreenState
     if (confirmed != true || _editId == null) return;
     await ref.read(repositoryProvider).deleteTransaction(_editId!);
     if (!mounted) return;
+    _dirty = false;
     invalidateTransactionData(ref);
     context.pop();
   }

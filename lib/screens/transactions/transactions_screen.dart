@@ -62,6 +62,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         .where((item) => _selectedIds.contains(item.id))
         .toList();
     final selectedTotal = selectedItems.fold<int>(0, (sum, item) {
+      if (item.isVoid) return sum;
       final rate = item.currency == headerCurrency
           ? 1.0
           : rates[item.currency] ?? 1.0;
@@ -1424,7 +1425,9 @@ class _TransactionTile extends ConsumerWidget {
         ? theme.colorScheme.tertiary
         : colorFromDb(transaction.categoryColor);
 
-    return ListTile(
+    return Opacity(
+      opacity: transaction.isVoid ? 0.45 : 1,
+      child: ListTile(
         selected: selected,
         selectedTileColor: theme.colorScheme.primaryContainer.withValues(
           alpha: 0.35,
@@ -1525,6 +1528,7 @@ class _TransactionTile extends ConsumerWidget {
             ),
           ],
         ),
-      );
+      ),
+    );
   }
 }
