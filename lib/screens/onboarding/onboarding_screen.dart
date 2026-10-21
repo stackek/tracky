@@ -120,7 +120,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               _Feature(
                 icon: Icons.swap_horiz,
                 title: 'Bring your history',
-                text: 'Restores backups created by My Expenses (.zip or .enc).',
+                text: 'Restores .zip and encrypted .enc backups.',
               ),
               _Feature(
                 icon: Icons.volunteer_activism_outlined,
@@ -134,17 +134,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _restore,
-                    icon: const Icon(Icons.restore),
-                    label: const Text('Restore a My Expenses backup'),
+                    onPressed: _startFresh,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create new database'),
                   ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: _startFresh,
-                    child: const Text('Start fresh'),
+                  child: OutlinedButton.icon(
+                    onPressed: _restore,
+                    icon: const Icon(Icons.restore),
+                    label: const Text('Restore backup'),
                   ),
                 ),
                 const SizedBox(height: 16),
