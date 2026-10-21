@@ -1,0 +1,661 @@
+import 'package:collection/collection.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/currency.dart';
+import '../../core/dates.dart';
+import '../../core/icons.dart';
+import '../../models/models.dart';
+import '../../providers.dart';
+import '../../widgets/empty_state.dart';
+
+class StatsScreen extends ConsumerWidget {
+  const StatsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final month = ref.watch(statsMonthProvider);
+    final range = ref.watch(statsRangeProvider);
+    final accountId = ref.watch(statsAccountProvider);
+    final accounts =
+        ref.watch(activeAccountsProvider).value ?? const <Account>[];
+    final stats = ref.watch(statsProvider);
+    final earliest = ref.watch(earliestTransactionDateProvider).value;
+    final theme = Theme.of(context);
+    final now = DateTime.now();
+    final currentMonth = DateTime(now.year, now.month, 1);
+    final earliestMonth = earliest == null
+        ? currentMonth
+        : DateTime(earliest.year, earliest.month, 1);
+    final canGoPrevious =
+        range == null && month.isAfter(earliestMonth);
+    final canGoNext = range == null && month.isBefore(currentMonth);
+    final selectedAccount =
+        accounts.where((account) => account.id == accountId).firstOrNull;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Statistics'),
+        actions: [
+          PopupMenuButton<int>(
+            tooltip: 'Account',
+            icon: const Icon(Icons.filter_alt_outlined),
+            initialValue: accountId ?? -1,
+            onSelected: (value) => ref
+                .read(statsAccountProvider.notifier)
+                .set(value == -1 ? null : value),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: -1,
+                child: Row(
+                  children: [
+                    const Icon(Icons.public, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('All accounts')),
+                    if (accountId == null) const Icon(Icons.check, size: 18),
+                  ],
+                ),
+              ),
+              for (final account in accounts)
+                PopupMenuItem(
+                  value: account.id,
+                  child: Row(
+                    children: [
+                      Icon(iconForAccountType(account.type), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(account.label)),
+                      if (accountId == account.id)
+                        const Icon(Icons.check, size: 18),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (details) {
+          final velocity = details.primaryVelocity ?? 0;
+          if (range != null) return;
+          if (velocity > 250 && canGoPrevious) {
+            ref.read(statsMonthProvider.notifier).previous();
+          } else if (velocity < -250 && canGoNext) {
+            ref.read(statsMonthProvider.notifier).next();
+          }
+        },
+        child: stats.when(
+          data: (data) => RefreshIndicator(
+            onRefresh: () async => ref.invalidate(statsProvider),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+              children: [
+                _Header(
+                  month: month,
+                  range: range,
+                  canGoPrevious: canGoPrevious,
+                  canGoNext: canGoNext,
+                  onPrevious: canGoPrevious
+                      ? () => ref.read(statsMonthProvider.notifier).previous()
+                      : null,
+                  onNext: canGoNext
+                      ? () => ref.read(statsMonthProvider.notifier).next()
+                      : null,
+                  onPickRange: () =>
+                      _pickRange(context, ref, earliest, now),
+                  onClearRange: () =>
+                      ref.read(statsRangeProvider.notifier).set(null),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    avatar: selectedAccount == null
+                        ? const Icon(Icons.public, size: 18)
+                        : Icon(
+                            iconForAccountType(selectedAccount.type),
+                            size: 18,
+                          ),
+                    label: Text(selectedAccount?.label ?? 'All accounts'),
+                    onPressed: () => _showAccountMenu(context, ref, accounts),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _SummaryCards(data: data, theme: theme),
+                const SizedBox(height: 22),
+                if (data.byCategory.isEmpty)
+                  const EmptyState(
+                    icon: Icons.pie_chart_outline,
+                    title: 'No expenses in this period',
+                    message: 'Add an expense to see the breakdown by category.',
+                  )
+                else
+                  _CategoryBreakdown(data: data),
+                const SizedBox(height: 12),
+                Center(
+                  child: Text(
+                    range == null
+                        ? 'Swipe left or right to change month'
+                        : 'Showing a custom date range',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Could not load statistics:\n$error'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickRange(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime? earliest,
+    DateTime now,
+  ) async {
+    final current = ref.read(statsRangeProvider);
+    final month = ref.read(statsMonthProvider);
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: earliest ?? DateTime(2000),
+      lastDate: now,
+      initialDateRange: current ??
+          DateTimeRange(
+            start: DateTime(month.year, month.month + 1, 0),
+            end: DateTime(month.year, month.month + 1, 0),
+          ),
+      helpText: 'Statistics period',
+    );
+    if (range != null) {
+      ref.read(statsRangeProvider.notifier).set(range);
+    }
+  }
+
+  void _showAccountMenu(
+    BuildContext context,
+    WidgetRef ref,
+    List<Account> accounts,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.public),
+              title: const Text('All accounts'),
+              trailing: ref.read(statsAccountProvider) == null
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () {
+                ref.read(statsAccountProvider.notifier).set(null);
+                Navigator.of(context).pop();
+              },
+            ),
+            for (final account in accounts)
+              ListTile(
+                leading: Icon(iconForAccountType(account.type)),
+                title: Text(account.label),
+                subtitle: Text(account.currency),
+                trailing: ref.read(statsAccountProvider) == account.id
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () {
+                  ref.read(statsAccountProvider.notifier).set(account.id);
+                  Navigator.of(context).pop();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.month,
+    required this.range,
+    required this.canGoPrevious,
+    required this.canGoNext,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onPickRange,
+    required this.onClearRange,
+  });
+
+  final DateTime month;
+  final DateTimeRange? range;
+  final bool canGoPrevious;
+  final bool canGoNext;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback onPickRange;
+  final VoidCallback onClearRange;
+
+  @override
+  Widget build(BuildContext context) {
+    if (range != null) {
+      return Row(
+        children: [
+          IconButton(
+            onPressed: onPickRange,
+            icon: const Icon(Icons.date_range),
+            tooltip: 'Change range',
+          ),
+          Expanded(
+            child: Text(
+              '${formatShortDate(range!.start)} – ${formatShortDate(range!.end)}',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+          IconButton(
+            onPressed: onClearRange,
+            icon: const Icon(Icons.close),
+            tooltip: 'Back to monthly view',
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left),
+          tooltip: 'Previous month',
+        ),
+        Expanded(
+          child: Text(
+            formatMonth(month),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right),
+          tooltip: 'Next month',
+        ),
+        IconButton(
+          onPressed: onPickRange,
+          icon: const Icon(Icons.date_range),
+          tooltip: 'Choose date range',
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryCards extends StatelessWidget {
+  const _SummaryCards({required this.data, required this.theme});
+
+  final StatsData data;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final income = data.income;
+    final expense = -data.expense;
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _BigCard(
+                label: 'Income',
+                amount: income,
+                currency: data.currency,
+                icon: Icons.south_west,
+                color: theme.colorScheme.primary,
+                background: theme.colorScheme.primaryContainer,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _BigCard(
+                label: 'Expenses',
+                amount: expense,
+                currency: data.currency,
+                icon: Icons.north_east,
+                color: theme.colorScheme.error,
+                background: theme.colorScheme.errorContainer,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                data.net >= 0 ? Icons.trending_up : Icons.trending_down,
+                color: data.net >= 0
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.error,
+              ),
+              const SizedBox(width: 10),
+              Text('Net', style: theme.textTheme.titleSmall),
+              const Spacer(),
+              Text(
+                formatMoney(data.net, data.currency, signed: true),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: data.net >= 0
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.error,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BigCard extends StatelessWidget {
+  const _BigCard({
+    required this.label,
+    required this.amount,
+    required this.currency,
+    required this.icon,
+    required this.color,
+    required this.background,
+  });
+
+  final String label;
+  final int amount;
+  final String currency;
+  final IconData icon;
+  final Color color;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(color: color),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatMoney(amount, currency),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryBreakdown extends StatefulWidget {
+  const _CategoryBreakdown({required this.data});
+
+  final StatsData data;
+
+  @override
+  State<_CategoryBreakdown> createState() => _CategoryBreakdownState();
+}
+
+class _CategoryBreakdownState extends State<_CategoryBreakdown> {
+  int _selectedIndex = -1;
+  bool _percent = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total = widget.data.byCategory
+        .fold<int>(0, (sum, category) => sum + category.amount);
+    final selected = _selectedIndex >= 0 &&
+            _selectedIndex < widget.data.byCategory.length
+        ? widget.data.byCategory[_selectedIndex]
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Spending by category',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            SegmentedButton<bool>(
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              segments: const [
+                ButtonSegment(value: false, label: Text('Amount')),
+                ButtonSegment(value: true, label: Text('Percent')),
+              ],
+              selected: {_percent},
+              onSelectionChanged: (value) =>
+                  setState(() => _percent = value.first),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 230,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              PieChart(
+                PieChartData(
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 56,
+                  startDegreeOffset: -90,
+                  pieTouchData: PieTouchData(
+                    touchCallback: (event, response) {
+                      if (event is FlTapUpEvent) {
+                        setState(() {
+                          _selectedIndex =
+                              response?.touchedSection?.touchedSectionIndex ??
+                                  -1;
+                        });
+                      }
+                    },
+                  ),
+                  sections: [
+                    for (var i = 0; i < widget.data.byCategory.length; i++)
+                      PieChartSectionData(
+                        value: widget.data.byCategory[i].amount.toDouble(),
+                        color: colorFromDb(widget.data.byCategory[i].color),
+                        radius: _selectedIndex == i ? 64 : 50,
+                        showTitle: _selectedIndex == i,
+                        title: _selectedIndex == i
+                            ? (_percent
+                                ? '${_percentage(widget.data.byCategory[i].amount, total)}%'
+                                : formatMoney(
+                                    widget.data.byCategory[i].amount,
+                                    widget.data.currency,
+                                  ))
+                            : '',
+                        titleStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (selected == null)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Total',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      _percent ? '100%' : formatMoney(total, widget.data.currency),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      iconForCategory(selected.icon),
+                      color: colorFromDb(selected.color),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _percent
+                          ? '${_percentage(selected.amount, total)}%'
+                          : formatMoney(selected.amount, widget.data.currency),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (var i = 0; i < widget.data.byCategory.length; i++)
+          _CategoryRow(
+            category: widget.data.byCategory[i],
+            currency: widget.data.currency,
+            percent: _percent,
+            total: total,
+            selected: _selectedIndex == i,
+            onTap: () => setState(
+              () => _selectedIndex = _selectedIndex == i ? -1 : i,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({
+    required this.category,
+    required this.currency,
+    required this.percent,
+    required this.total,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final CategoryTotal category;
+  final String currency;
+  final bool percent;
+  final int total;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = colorFromDb(category.color);
+    return Material(
+      color: selected
+          ? color.withValues(alpha: 0.16)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: color.withValues(alpha: 0.18),
+                child: Icon(
+                  iconForCategory(category.icon),
+                  size: 18,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  category.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+              ),
+              Text(
+                percent
+                    ? '${_percentage(category.amount, total)}%'
+                    : formatMoney(category.amount, currency),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _percentage(int amount, int total) =>
+    total == 0 ? '0' : (amount * 100 / total).round().toString();
